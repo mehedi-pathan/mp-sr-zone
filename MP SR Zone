@@ -1,0 +1,1241 @@
+//@version=6
+indicator("MP SR Zone • Next Candle Engine", shorttitle="MP SR ZONE", overlay=true, max_bars_back=5000, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+
+//==============================================================================
+// MP SR ZONE — NEXT CANDLE PREDICTION ENGINE
+// Preserves the existing zone-based analysis and adds a non-repainting, next-candle
+// directional model designed for 1m and 2m charts.
+//==============================================================================
+
+//----------------------------------------------------------------------------- 
+// GENERAL
+//-----------------------------------------------------------------------------
+showAll = input.bool(true, "Show all", group="01 • General")
+scalpMode = input.string("1-2 Minute", "Scalp mode", options=["1-2 Minute", "1 Minute", "2 Minute"], group="01 • General")
+showSignalMarkers = input.bool(false, "Show signal markers", group="01 • General")
+showLegacySetupMarkers = input.bool(false, "Show legacy setup markers", group="01 • General")
+showBreakoutMarkers = input.bool(false, "Show breakout markers", group="01 • General")
+showNoTradeMarker = input.bool(false, "Show no-trade marker", group="01 • General")
+showBarColor = input.bool(false, "Color bars", group="01 • General")
+showZoneLabels = input.bool(true, "Show zone labels", group="01 • General")
+warnOnLowQuality = input.bool(true, "Warn on low-quality signals", group="01 • General")
+showVolume = input.bool(true, "Show volume", group="01 • General")
+volumeMode = input.string("Delta Volume", "Volume mode", options=["Delta Volume"], group="01 • General")
+
+//----------------------------------------------------------------------------- 
+// ZONE ENGINE
+//-----------------------------------------------------------------------------
+showMPZones = input.bool(true, "Show MP zones", group="02 • Scalping Zone Engine")
+showSupport = input.bool(true, "Show support", group="02 • Scalping Zone Engine")
+showResistance = input.bool(true, "Show resistance", group="02 • Scalping Zone Engine")
+showHighVolumeZones = input.bool(true, "Show high-volume boxes", group="02 • Scalping Zone Engine")
+showATRZones = input.bool(false, "Show ATR zones", group="02 • Scalping Zone Engine")
+showCandleZones = input.bool(false, "Show candle zones", group="02 • Scalping Zone Engine")
+showTouchZones = input.bool(false, "Show touch zones", group="02 • Scalping Zone Engine")
+showSDZones = input.bool(false, "Show supply/demand zones", group="02 • Scalping Zone Engine")
+showComposite = input.bool(false, "Show composite zone", group="02 • Scalping Zone Engine")
+showFreshZones = input.bool(true, "Show fresh zones", group="02 • Scalping Zone Engine")
+showClassic = input.bool(false, "Show classic S/R", group="02 • Scalping Zone Engine")
+showTrendlines = input.bool(false, "Show trendlines", group="02 • Scalping Zone Engine")
+showZigzag = input.bool(false, "Show zigzag", group="02 • Scalping Zone Engine")
+pivotLen = input.int(3, "Pivot length", minval=2, maxval=20, group="02 • Scalping Zone Engine")
+atrLen = input.int(14, "ATR length", minval=5, maxval=50, group="02 • Scalping Zone Engine")
+atrZoneMult = input.float(0.25, "ATR zone multiplier", step=0.01, group="02 • Scalping Zone Engine")
+signalZoneMult = input.float(0.30, "Signal zone multiplier", step=0.01, group="02 • Scalping Zone Engine")
+zoneExtend = input.int(40, "Zone extend bars", minval=10, maxval=200, group="02 • Scalping Zone Engine")
+maxZonesSide = input.int(2, "Max zone count", minval=1, maxval=10, group="02 • Scalping Zone Engine")
+volBoxFilterLen = input.int(2, "High-volume filter", minval=1, maxval=20, group="02 • Scalping Zone Engine")
+volBoxWidth = input.float(1.0, "High-volume box width", minval=0.1, maxval=10.0, step=0.1, group="02 • Scalping Zone Engine")
+
+//----------------------------------------------------------------------------- 
+// SMART SNR
+//-----------------------------------------------------------------------------
+smartSnrEnabled = input.bool(true, "Show Smart SnR", group="02 • Scalping Zone Engine")
+smartSnrType = input.string("Swing HiLo", "SnR Type", options=["Volume", "Swing HiLo"], group="02 • Scalping Zone Engine")
+smartSnrPeriod = input.int(20, "Swing Period", minval=1, maxval=50, group="02 • Scalping Zone Engine")
+smartSnrLineStyleI = input.string("Solid", "Line Style", options=["Solid", "Dashed", "Dotted"], group="02 • Scalping Zone Engine")
+smartSnrLineStyle = smartSnrLineStyleI == "Solid" ? line.style_solid : smartSnrLineStyleI == "Dashed" ? line.style_dashed : line.style_dotted
+smartSnrLineWidth = input.int(1, "Linewidth", minval=1, maxval=5, group="02 • Scalping Zone Engine")
+smartSnrExtendI = input.string("None", "Line Extend", options=["None", "Left", "Right", "Both"], group="02 • Scalping Zone Engine")
+smartSnrExtend = smartSnrExtendI == "None" ? extend.none : smartSnrExtendI == "Left" ? extend.left : smartSnrExtendI == "Both" ? extend.both : extend.right
+smartSupLabel = input.color(color.new(color.black, 90), "Support Label", group="02 • Scalping Zone Engine", inline="1")
+smartSupText = input.color(color.red, "Text", group="02 • Scalping Zone Engine", inline="1")
+smartSupLine = input.color(color.red, "Line", group="02 • Scalping Zone Engine", inline="1")
+smartResLabel = input.color(color.new(color.black, 90), "Resistance Label", group="02 • Scalping Zone Engine", inline="2")
+smartResText = input.color(color.blue, "Text", group="02 • Scalping Zone Engine", inline="2")
+smartResLine = input.color(color.blue, "Line", group="02 • Scalping Zone Engine", inline="2")
+
+//----------------------------------------------------------------------------- 
+// TOUCH / SD / SUPPORT
+//-----------------------------------------------------------------------------
+minTouches = input.int(2, "Min touches", minval=1, maxval=10, group="03 • Zone Strength")
+touchLookback = input.int(100, "Touch lookback", minval=20, maxval=250, group="03 • Zone Strength")
+touchToleranceATR = input.float(0.15, "Touch tolerance ATR", step=0.01, group="03 • Zone Strength")
+showStrengthText = input.bool(true, "Show strength text", group="03 • Zone Strength")
+
+sdImpulseATR = input.float(0.80, "SD impulse ATR", step=0.05, group="04 • Supply / Demand")
+showTestedZones = input.bool(true, "Show tested zones", group="04 • Supply / Demand")
+showBrokenZones = input.bool(false, "Show broken zones", group="04 • Supply / Demand")
+
+//----------------------------------------------------------------------------- 
+// TREND / MTF / MOMENTUM
+//-----------------------------------------------------------------------------
+useTrendFilter = input.bool(true, "Use trend filter", group="05 • Trend / Bias")
+emaFastLen = input.int(9, "EMA fast", minval=3, maxval=50, group="05 • Trend / Bias")
+emaSlowLen = input.int(21, "EMA slow", minval=8, maxval=80, group="05 • Trend / Bias")
+showEMAs = input.bool(true, "Plot EMAs", group="05 • Trend / Bias")
+
+useMTFFilter = input.bool(true, "Use HTF filter", group="06 • Higher Timeframe Filter")
+mtfTf = input.string("5", "MTF timeframe", options=["5", "15", "30"], group="06 • Higher Timeframe Filter")
+mtfFastLen = input.int(20, "HTF fast EMA", minval=5, maxval=50, group="06 • Higher Timeframe Filter")
+mtfSlowLen = input.int(50, "HTF slow EMA", minval=10, maxval=200, group="06 • Higher Timeframe Filter")
+confirmedMTF = input.bool(true, "Use confirmed HTF values", group="06 • Higher Timeframe Filter")
+
+useRSI = input.bool(true, "Use RSI", group="07 • Momentum")
+rsiLen = input.int(14, "RSI length", minval=5, maxval=50, group="07 • Momentum")
+rsiBullLevel = input.float(50.0, "RSI bull level", step=1.0, group="07 • Momentum")
+rsiBearLevel = input.float(50.0, "RSI bear level", step=1.0, group="07 • Momentum")
+
+useBreakout = input.bool(true, "Use breakout logic", group="07 • Momentum")
+
+useStoch = input.bool(true, "Use stochastic", group="07 • Momentum")
+stochLen = input.int(14, "Stoch length", minval=5, maxval=50, group="07 • Momentum")
+stochSmooth = input.int(3, "Stoch smooth", minval=1, maxval=10, group="07 • Momentum")
+stochBullLevel = input.float(55.0, "Stoch bull threshold", step=1.0, group="07 • Momentum")
+stochBearLevel = input.float(45.0, "Stoch bear threshold", step=1.0, group="07 • Momentum")
+
+//----------------------------------------------------------------------------- 
+// STRUCTURE / PRICE ACTION / VOLATILITY
+//-----------------------------------------------------------------------------
+structureLen = input.int(5, "Swing structure length", minval=3, maxval=30, group="08 • Structure")
+structureTrendMin = input.float(0.7, "Structure trend min", step=0.1, group="08 • Structure")
+
+useRejection = input.bool(true, "Use candle rejection", group="09 • Price Action")
+useEngulfing = input.bool(true, "Use engulfing confirmation", group="09 • Price Action")
+minWickBodyRatio = input.float(1.20, "Min wick/body ratio", step=0.05, group="09 • Price Action")
+bodyQualityMin = input.float(0.55, "Body quality min", step=0.05, group="09 • Price Action")
+closeBiasMin = input.float(0.60, "Close bias min", step=0.05, group="09 • Price Action")
+
+volLowThreshold = input.float(0.0025, "Low vol threshold", step=0.0005, group="10 • Volatility")
+volNormalThreshold = input.float(0.0070, "Normal vol threshold", step=0.0005, group="10 • Volatility")
+volExtremeThreshold = input.float(0.0150, "Extreme vol threshold", step=0.0005, group="10 • Volatility")
+volAtrAvgLen = input.int(20, "Vol ATR average length", minval=5, maxval=50, group="10 • Volatility")
+
+//----------------------------------------------------------------------------- 
+// S/R LOCATION / SESSION / EXHAUSTION / SIGNAL FILTER
+//-----------------------------------------------------------------------------
+entryBufferATR = input.float(0.15, "Entry buffer ATR", step=0.01, group="11 • Support / Resistance")
+useSessionFilter = input.bool(false, "Use session context", group="12 • Session")
+
+exhaustionBodyMult = input.float(1.8, "Exhaustion body multiplier", step=0.1, group="13 • Exhaustion")
+exhaustionDistanceMult = input.float(2.4, "Exhaustion distance multiplier", step=0.1, group="13 • Exhaustion")
+maxConflict = input.float(0.55, "Conflict threshold", step=0.05, group="14 • Signal Filter")
+minEdge = input.float(12.0, "Min edge", step=1.0, group="14 • Signal Filter")
+strongEdge = input.float(28.0, "Strong edge threshold", step=1.0, group="14 • Signal Filter")
+minQuality = input.float(55.0, "Min market quality", step=1.0, group="14 • Signal Filter")
+strongQuality = input.float(75.0, "Strong market quality", step=1.0, group="14 • Signal Filter")
+
+//----------------------------------------------------------------------------- 
+// DASHBOARD / ALERTS / STATISTICS
+//-----------------------------------------------------------------------------
+showDashboard = input.bool(true, "Show dashboard", group="15 • Dashboard")
+showReasonCodes = input.bool(false, "Show reason codes", group="15 • Dashboard")
+showAlerts = input.bool(true, "Enable alerts", group="16 • Alerts")
+showStats = input.bool(false, "Show statistics", group="17 • Backtest / Statistics")
+
+//----------------------------------------------------------------------------- 
+// ENGULFING TIMEFRAME LEVELS (5m / 15m / 30m / 45m)
+//-----------------------------------------------------------------------------
+engulfLevelGroup = "18 • MTF Engulfing Levels"
+engulfShowLevels = input.bool(true, "Show TF levels", group=engulfLevelGroup)
+engulfFilterEngulfing = input.bool(false, "Filter engulfing", group=engulfLevelGroup)
+engulfTf5Enabled = input.bool(true, "5m", group=engulfLevelGroup)
+engulfTf15Enabled = input.bool(true, "15m", group=engulfLevelGroup)
+engulfTf30Enabled = input.bool(true, "30m", group=engulfLevelGroup)
+engulfTf45Enabled = input.bool(true, "45m", group=engulfLevelGroup)
+engulfKeepPrevLevels = input.bool(false, "Keep previous level lines", group=engulfLevelGroup)
+engulfShowLabel = input.bool(false, "Show timeframe label", group=engulfLevelGroup)
+engulfExtendLines = input.bool(false, "Extend level lines", group=engulfLevelGroup)
+engulfFib0Color = input.color(color.new(color.green, 0), "0%", group=engulfLevelGroup, inline="1")
+engulfFib25Color = input.color(color.new(color.lime, 0), "25%", group=engulfLevelGroup, inline="1")
+engulfFib50Color = input.color(color.new(color.gray, 0), "50%", group=engulfLevelGroup, inline="2")
+engulfFib75Color = input.color(color.new(color.red, 0), "75%", group=engulfLevelGroup, inline="2")
+engulfFib100Color = input.color(color.new(color.red, 0), "100%", group=engulfLevelGroup, inline="3")
+engulfFib0Style = input.string("Solid", "Style 0", options=["Solid", "Dashed", "Dotted"], group=engulfLevelGroup, inline="4")
+engulfFib25Style = input.string("Dotted", "Style 25", options=["Solid", "Dashed", "Dotted"], group=engulfLevelGroup, inline="4")
+engulfFib50Style = input.string("Dashed", "Style 50", options=["Solid", "Dashed", "Dotted"], group=engulfLevelGroup, inline="5")
+engulfFib75Style = input.string("Dotted", "Style 75", options=["Solid", "Dashed", "Dotted"], group=engulfLevelGroup, inline="5")
+engulfFib100Style = input.string("Solid", "Style 100", options=["Solid", "Dashed", "Dotted"], group=engulfLevelGroup, inline="6")
+engulfTableEnabled = input.bool(true, "Show watching TF table", group=engulfLevelGroup)
+engulfTablePosition = input.string("middle_right", "Table position", options=["top_left", "top_center", "top_right", "middle_left", "middle_center", "middle_right", "bottom_left", "bottom_center", "bottom_right"], group=engulfLevelGroup)
+engulfTableTextSize = input.string("small", "Table text size", options=["large", "normal", "small", "tiny"], group=engulfLevelGroup)
+engulfPatternMarkers = input.bool(true, "Show engulfing markers", group=engulfLevelGroup)
+engulfBarColor = input.bool(true, "Color bars on engulfing", group=engulfLevelGroup)
+engulfPatternAlerts = input.bool(true, "Enable engulfing alerts", group=engulfLevelGroup)
+
+//----------------------------------------------------------------------------- 
+// COLORS
+//-----------------------------------------------------------------------------
+supportColor = color.new(color.rgb(76, 175, 80), 88)
+resistanceColor = color.new(color.rgb(244, 67, 54), 88)
+atrColor = color.new(color.rgb(33, 150, 243), 90)
+candleColor = color.new(color.rgb(255, 152, 0), 90)
+touchColor = color.new(color.rgb(96, 125, 139), 92)
+sdDemandColor = color.new(color.rgb(76, 175, 80), 86)
+sdSupplyColor = color.new(color.rgb(244, 67, 54), 86)
+compositeColor = color.new(color.rgb(255, 235, 59), 88)
+freshColor = color.new(color.white, 96)
+
+//==============================================================================
+// CORE PRICE / TREND DATA
+//==============================================================================
+atr = ta.atr(atrLen)
+atrAvg = ta.sma(atr, volAtrAvgLen)
+
+emaFast = ta.ema(close, emaFastLen)
+emaSlow = ta.ema(close, emaSlowLen)
+
+ph = ta.pivothigh(high, pivotLen, pivotLen)
+pl = ta.pivotlow(low, pivotLen, pivotLen)
+
+rsi = ta.rsi(close, rsiLen)
+stochRaw = ta.stoch(close, high, low, stochLen)
+stochK = ta.sma(stochRaw, stochSmooth)
+stochD = ta.sma(stochK, stochSmooth)
+
+trendStrengthRaw = math.abs(close - close[1])
+adxVal = ta.rma(trendStrengthRaw, atrLen)
+
+body = math.abs(close - open)
+barRange = math.max(high - low, syminfo.mintick)
+bodyRatio = barRange > 0 ? body / barRange : 0.0
+closePosition = barRange > 0 ? (close - low) / barRange : 0.5
+upperWick = high - math.max(open, close)
+lowerWick = math.min(open, close) - low
+
+bullPin = close > open and lowerWick >= body * minWickBodyRatio
+bearPin = close < open and upperWick >= body * minWickBodyRatio
+bullEngulf = close > open and close >= open[1] and open <= close[1] and close[1] < open[1]
+bearEngulf = close < open and open >= close[1] and close <= open[1] and close[1] > open[1]
+bullRejection = bullPin or (useEngulfing and bullEngulf)
+bearRejection = bearPin or (useEngulfing and bearEngulf)
+
+//==============================================================================
+// MTF CONTEXT
+//==============================================================================
+mtfFastS = request.security(syminfo.tickerid, mtfTf, ta.ema(close, mtfFastLen), lookahead=barmerge.lookahead_off)
+mtfSlowS = request.security(syminfo.tickerid, mtfTf, ta.ema(close, mtfSlowLen), lookahead=barmerge.lookahead_off)
+mtfRsiS = request.security(syminfo.tickerid, mtfTf, ta.rsi(close, rsiLen), lookahead=barmerge.lookahead_off)
+
+mtfFast = confirmedMTF ? mtfFastS[1] : mtfFastS
+mtfSlow = confirmedMTF ? mtfSlowS[1] : mtfSlowS
+mtfBull = mtfFast > mtfSlow and mtfRsiS > 50
+mtfBear = mtfFast < mtfSlow and mtfRsiS < 50
+
+//==============================================================================
+// SESSION CONTEXT (real market session windows)
+//==============================================================================
+// Use market session windows directly so Pine reads the real open state for
+// Sydney, Tokyo, London, and New York without false OFF HOURS readings.
+nyOpen = not na(time(timeframe.period, "0930-1600", "America/New_York"))
+ldnOpen = not na(time(timeframe.period, "0800-1700", "Europe/London"))
+tokyoOpen = not na(time(timeframe.period, "0900-1500", "Asia/Tokyo"))
+sydneyOpen = not na(time(timeframe.period, "1000-1700", "Australia/Sydney"))
+
+marketClockText = "OFF HOURS"
+if nyOpen and ldnOpen
+    marketClockText := "LONDON + NY"
+else if nyOpen
+    marketClockText := "NEW YORK"
+else if ldnOpen
+    marketClockText := "LONDON"
+else if tokyoOpen
+    marketClockText := "TOKYO"
+else if sydneyOpen
+    marketClockText := "SYDNEY"
+
+sessionLabel = marketClockText
+
+// Keep both directions possible in the scoring engine. Do not force only bullish bias
+// during NY hours; otherwise the chart will suppress sell-side signals.
+sessionBullBias = nyOpen or ldnOpen
+sessionBearBias = tokyoOpen or sydneyOpen
+
+//==============================================================================
+// EXISTING ZONE LOGIC (kept for compatibility)
+//==============================================================================
+var box[] supportBoxes = array.new_box()
+var box[] resistanceBoxes = array.new_box()
+var box[] strongSupportBoxes = array.new_box()
+var box[] strongResistanceBoxes = array.new_box()
+var box coreSupportBox = na
+var box coreResistanceBox = na
+var string[] supportNames = array.new_string()
+var string[] resistanceNames = array.new_string()
+var float coreSupport = na
+var float coreResistance = na
+var float coreSupportTop = na
+var float coreResistanceBottom = na
+
+f_delete_oldest(_boxes, _names, _max) =>
+    while array.size(_boxes) > _max
+        oldBox = array.shift(_boxes)
+        array.remove(_names, 0)
+        box.delete(oldBox)
+
+f_count_support_touches(_level, _tol) =>
+    int count = 0
+    for i = 0 to touchLookback - 1
+        if not na(low[i]) and math.abs(low[i] - _level) <= _tol
+            count += 1
+    count
+
+f_count_resistance_touches(_level, _tol) =>
+    int count = 0
+    for i = 0 to touchLookback - 1
+        if not na(high[i]) and math.abs(high[i] - _level) <= _tol
+            count += 1
+    count
+
+f_add_support(_bottom, _top, _name, _bg) =>
+    if showAll and showMPZones and showSupport
+        b = box.new(left=bar_index - pivotLen, top=_top, right=bar_index + zoneExtend, bottom=_bottom,
+             bgcolor=_bg, border_color=color.new(color.lime, 40), border_width=1,
+             text=showZoneLabels ? _name : "", text_color=color.white, text_size=size.tiny)
+        array.push(supportBoxes, b)
+        array.push(supportNames, _name)
+        f_delete_oldest(supportBoxes, supportNames, maxZonesSide)
+
+f_add_resistance(_bottom, _top, _name, _bg) =>
+    if showAll and showMPZones and showResistance
+        b = box.new(left=bar_index - pivotLen, top=_top, right=bar_index + zoneExtend, bottom=_bottom,
+             bgcolor=_bg, border_color=color.new(color.red, 40), border_width=1,
+             text=showZoneLabels ? _name : "", text_color=color.white, text_size=size.tiny)
+        array.push(resistanceBoxes, b)
+        array.push(resistanceNames, _name)
+        f_delete_oldest(resistanceBoxes, resistanceNames, maxZonesSide)
+
+newSupport = not na(pl)
+newResistance = not na(ph)
+pivotSupport = newSupport ? pl : na
+pivotResistance = newResistance ? ph : na
+
+var int lastSupportBar = na
+var float lastSupportLevel = na
+var int lastResistanceBar = na
+var float lastResistanceLevel = na
+
+if newSupport
+    coreSupport := pivotSupport
+    coreSupportTop := pivotSupport + atr[pivotLen] * signalZoneMult
+    lastSupportBar := bar_index - pivotLen
+    lastSupportLevel := pivotSupport
+    if na(coreSupportBox)
+        coreSupportBox := box.new(left=bar_index - pivotLen, top=coreSupportTop, right=bar_index, bottom=coreSupport,
+             bgcolor=supportColor, border_color=color.new(color.lime, 40), border_width=1,
+             text=showZoneLabels ? "SUPPORT" : "", text_color=color.white, text_size=size.tiny)
+    if showHighVolumeZones and showSupport and volume >= ta.highest(volume, volBoxFilterLen)
+        boxW = math.max(atr, syminfo.mintick) * volBoxWidth
+        b = box.new(left=bar_index - pivotLen, top=pivotSupport + boxW, right=bar_index + zoneExtend, bottom=pivotSupport - boxW,
+             bgcolor=color.new(color.lime, 88), border_color=color.new(color.lime, 40), border_width=1,
+             text="SUPPORT • VOL: " + str.tostring(volume), text_color=color.white, text_size=size.tiny)
+        array.push(strongSupportBoxes, b)
+        while array.size(strongSupportBoxes) > maxZonesSide
+            oldBox = array.shift(strongSupportBoxes)
+            box.delete(oldBox)
+
+if not na(coreSupport)
+    if na(coreSupportBox)
+        coreSupportBox := box.new(left=bar_index - pivotLen, top=coreSupportTop, right=bar_index, bottom=coreSupport,
+             bgcolor=supportColor, border_color=color.new(color.lime, 40), border_width=1,
+             text=showZoneLabels ? "SUPPORT" : "", text_color=color.white, text_size=size.tiny)
+    box.set_left(coreSupportBox, bar_index - pivotLen)
+    box.set_right(coreSupportBox, bar_index)
+    box.set_top(coreSupportBox, coreSupportTop)
+    box.set_bottom(coreSupportBox, coreSupport)
+    box.set_bgcolor(coreSupportBox, supportColor)
+    box.set_text(coreSupportBox, showZoneLabels ? "SUPPORT" : "")
+
+if newResistance
+    coreResistance := pivotResistance
+    coreResistanceBottom := pivotResistance - atr[pivotLen] * signalZoneMult
+    lastResistanceBar := bar_index - pivotLen
+    lastResistanceLevel := pivotResistance
+    if na(coreResistanceBox)
+        coreResistanceBox := box.new(left=bar_index - pivotLen, top=coreResistance, right=bar_index, bottom=coreResistanceBottom,
+             bgcolor=resistanceColor, border_color=color.new(color.red, 40), border_width=1,
+             text=showZoneLabels ? "RESISTANCE" : "", text_color=color.white, text_size=size.tiny)
+    if showHighVolumeZones and showResistance and volume >= ta.highest(volume, volBoxFilterLen)
+        boxW = math.max(atr, syminfo.mintick) * volBoxWidth
+        b = box.new(left=bar_index - pivotLen, top=pivotResistance + boxW, right=bar_index + zoneExtend, bottom=pivotResistance - boxW,
+             bgcolor=color.new(color.red, 88), border_color=color.new(color.red, 40), border_width=1,
+             text="RESISTANCE • VOL: " + str.tostring(volume), text_color=color.white, text_size=size.tiny)
+        array.push(strongResistanceBoxes, b)
+        while array.size(strongResistanceBoxes) > maxZonesSide
+            oldBox = array.shift(strongResistanceBoxes)
+            box.delete(oldBox)
+
+if not na(coreResistance)
+    if na(coreResistanceBox)
+        coreResistanceBox := box.new(left=bar_index - pivotLen, top=coreResistance, right=bar_index, bottom=coreResistanceBottom,
+             bgcolor=resistanceColor, border_color=color.new(color.red, 40), border_width=1,
+             text=showZoneLabels ? "RESISTANCE" : "", text_color=color.white, text_size=size.tiny)
+    box.set_left(coreResistanceBox, bar_index - pivotLen)
+    box.set_right(coreResistanceBox, bar_index)
+    box.set_top(coreResistanceBox, coreResistance)
+    box.set_bottom(coreResistanceBox, coreResistanceBottom)
+    box.set_bgcolor(coreResistanceBox, resistanceColor)
+    box.set_text(coreResistanceBox, showZoneLabels ? "RESISTANCE" : "")
+
+if newSupport and showATRZones
+    p = pivotSupport
+    w = atr[pivotLen] * atrZoneMult
+    f_add_support(p - w, p + w, "A ATR SUPPORT", atrColor)
+
+if newResistance and showATRZones
+    p = pivotResistance
+    w = atr[pivotLen] * atrZoneMult
+    f_add_resistance(p - w, p + w, "A ATR RESISTANCE", atrColor)
+
+if newSupport and showCandleZones
+    idx = pivotLen
+    candleTop = math.max(open[idx], close[idx])
+    candleBottom = low[idx]
+    f_add_support(candleBottom, candleTop, "B CANDLE DEMAND", candleColor)
+
+if newResistance and showCandleZones
+    idx = pivotLen
+    candleTop = high[idx]
+    candleBottom = math.min(open[idx], close[idx])
+    f_add_resistance(candleBottom, candleTop, "B CANDLE SUPPLY", candleColor)
+
+if newSupport and showTouchZones
+    tol = atr[pivotLen] * touchToleranceATR
+    touches = f_count_support_touches(pivotSupport, tol)
+    if touches >= minTouches
+        f_add_support(pivotSupport - tol, pivotSupport + tol, "C SUPPORT • " + str.tostring(touches) + "T", touchColor)
+
+if newResistance and showTouchZones
+    tol = atr[pivotLen] * touchToleranceATR
+    touches = f_count_resistance_touches(pivotResistance, tol)
+    if touches >= minTouches
+        f_add_resistance(pivotResistance - tol, pivotResistance + tol, "C RESISTANCE • " + str.tostring(touches) + "T", touchColor)
+
+if newSupport and showSDZones
+    idx = pivotLen
+    impulse = high - low
+    baseTop = math.max(open[idx], close[idx])
+    baseBottom = low[idx]
+    if impulse >= atr * sdImpulseATR
+        f_add_support(baseBottom, baseTop, "D DEMAND", sdDemandColor)
+
+if newResistance and showSDZones
+    idx = pivotLen
+    impulse = high - low
+    baseTop = high[idx]
+    baseBottom = math.min(open[idx], close[idx])
+    if impulse >= atr * sdImpulseATR
+        f_add_resistance(baseBottom, baseTop, "D SUPPLY", sdSupplyColor)
+
+s1 = ta.valuewhen(newSupport, pivotSupport, 0)
+s2 = ta.valuewhen(newSupport, pivotSupport, 1)
+s3 = ta.valuewhen(newSupport, pivotSupport, 2)
+s1Bar = ta.valuewhen(newSupport, bar_index - pivotLen, 0) - bar_index
+s2Bar = ta.valuewhen(newSupport, bar_index - pivotLen, 1) - bar_index
+s3Bar = ta.valuewhen(newSupport, bar_index - pivotLen, 2) - bar_index
+r1 = ta.valuewhen(newResistance, pivotResistance, 0)
+r2 = ta.valuewhen(newResistance, pivotResistance, 1)
+r3 = ta.valuewhen(newResistance, pivotResistance, 2)
+r1Bar = ta.valuewhen(newResistance, bar_index - pivotLen, 0) - bar_index
+r2Bar = ta.valuewhen(newResistance, bar_index - pivotLen, 1) - bar_index
+r3Bar = ta.valuewhen(newResistance, bar_index - pivotLen, 2) - bar_index
+
+fLL_draw(show_, showPrice_, x1, y1, x2, y2, txt, labColor, labStyle, txtColor, extend_, lineColor, lineStyle, lineWidth) =>
+    if not na(close) and show_ and not na(x1) and not na(y1)
+        ln = line.new(x1, y1, x2, y2, xloc.bar_index, extend_, lineColor, lineStyle, lineWidth)
+        line.delete(ln[1])
+        if showPrice_ and not na(y2)
+            lb = label.new(x2, y2, txt, xloc.bar_index, yloc.price, labColor, labStyle, txtColor)
+            label.delete(lb[1])
+
+fLL_draw(showMPZones and showSupport, true, bar_index + s1Bar, s1, bar_index + 10, s1, 'S -> ' + str.tostring(s1), color.new(color.green, 80), label.style_label_left, color.green, extend.right, color.new(color.green, 0), line.style_solid, 1)
+fLL_draw(showMPZones and showResistance, true, bar_index + r1Bar, r1, bar_index + 10, r1, 'R -> ' + str.tostring(r1), color.new(color.blue, 80), label.style_label_left, color.blue, extend.right, color.new(color.blue, 0), line.style_solid, 1)
+
+f_snr_barssince(_cond, _count) =>
+    _barssince = bar_index - ta.valuewhen(_cond, bar_index, _count)
+    _barssince
+
+f_snr_truncate(number) =>
+    dec = str.length(str.tostring(syminfo.mintick)) - 2
+    factor = math.pow(10, dec)
+    int(number * factor) / factor
+
+snrPh = ta.pivothigh(high, smartSnrPeriod, smartSnrPeriod)
+snrPl = ta.pivotlow(low, smartSnrPeriod, smartSnrPeriod)
+snrPhCond = not na(snrPh)
+snrPlCond = not na(snrPl)
+
+snrPh0 = ta.valuewhen(snrPhCond, close[smartSnrPeriod], 0)
+snrPh1 = ta.valuewhen(snrPhCond, close[smartSnrPeriod], 1)
+snrPh2 = ta.valuewhen(snrPhCond, close[smartSnrPeriod], 2)
+
+snrPl0 = ta.valuewhen(snrPlCond, close[smartSnrPeriod], 0)
+snrPl1 = ta.valuewhen(snrPlCond, close[smartSnrPeriod], 1)
+snrPl2 = ta.valuewhen(snrPlCond, close[smartSnrPeriod], 2)
+
+snrP0 = ta.valuewhen(snrPhCond or snrPlCond, close[smartSnrPeriod], 0)
+snrP1 = ta.valuewhen(snrPhCond or snrPlCond, close[smartSnrPeriod], 1)
+snrP2 = ta.valuewhen(snrPhCond or snrPlCond, close[smartSnrPeriod], 2)
+
+bar_snr_pl1 = int(math.max(1, nz(f_snr_barssince(snrPlCond, 1))))
+highest_1 = ta.highest(high[smartSnrPeriod], bar_snr_pl1)
+highestbars_1 = ta.highestbars(high[smartSnrPeriod], bar_snr_pl1)
+
+bar_snr_ph1 = int(math.max(1, nz(f_snr_barssince(snrPhCond, 1))))
+lowest_1 = ta.lowest(low[smartSnrPeriod], bar_snr_ph1)
+lowestbars_1 = ta.lowestbars(low[smartSnrPeriod], bar_snr_ph1)
+
+snrH = snrPhCond
+snrHA = snrPlCond and snrP1 == snrPl1
+snrHAA = snrPlCond and snrP1 == snrPl1 and snrP2 == snrPl2
+snrL = snrPlCond
+snrLA = snrPhCond and snrP1 == snrPh1
+snrLAA = snrPhCond and snrP1 == snrPh1 and snrP2 == snrPl2
+
+snrH0 = ta.valuewhen(snrH, high[smartSnrPeriod], 0)
+snrH1 = ta.valuewhen(snrH, high[smartSnrPeriod], 1)
+snrHA0 = ta.valuewhen(snrHA, highest_1, 0)
+
+snrL0 = ta.valuewhen(snrL, low[smartSnrPeriod], 0)
+snrL1 = ta.valuewhen(snrL, low[smartSnrPeriod], 1)
+snrLA0 = ta.valuewhen(snrLA, lowest_1, 0)
+
+f_snr_AA(x, xA, x0, xA0) => ta.valuewhen(x or xA, close, 0) == ta.valuewhen(x, close, 0) ? x0 : xA0
+f_snr_offset(x, xA, xAbars) => ta.valuewhen(x or xA, close, 0) == ta.valuewhen(x, close, 0) ? -smartSnrPeriod : xAbars - smartSnrPeriod
+
+snrFixPh = snrHA or snrH
+snrFixPl = snrLA or snrL
+snrFixPhVal = f_snr_AA(snrH, snrHA, snrH0, snrHA0)
+snrFixPlVal = f_snr_AA(snrL, snrLA, snrL0, snrLA0)
+snrFixPhVal1 = ta.valuewhen(snrFixPh, snrFixPhVal, 1)
+snrFixPlVal1 = ta.valuewhen(snrFixPl, snrFixPlVal, 1)
+
+snrOffsetPh = -f_snr_barssince(snrFixPh, 0) + f_snr_offset(snrH, snrHA, highestbars_1)
+snrOffsetPl = -f_snr_barssince(snrFixPl, 0) + f_snr_offset(snrL, snrLA, lowestbars_1)
+snrOffsetPh1 = ta.valuewhen(snrFixPh, snrOffsetPh, 1) - f_snr_barssince(snrFixPh, 1)
+snrOffsetPl1 = ta.valuewhen(snrFixPl, snrOffsetPl, 1) - f_snr_barssince(snrFixPl, 1)
+
+snrFixOffset = snrFixPh ? snrOffsetPh : snrOffsetPl
+snrFixPivotVal = snrFixPh ? snrFixPhVal : snrFixPlVal
+
+snrOffsetForHa = -f_snr_barssince(snrL, 1) - smartSnrPeriod
+snrOffsetForLa = -f_snr_barssince(snrH, 1) - smartSnrPeriod
+
+f_snr_series(x, xVal, xBar) =>
+    x0 = f_snr_truncate(ta.valuewhen(x, xVal, 0))
+    x1 = f_snr_truncate(ta.valuewhen(x, xVal, 1))
+    x2 = f_snr_truncate(ta.valuewhen(x, xVal, 2))
+    x0Bar = ta.valuewhen(x, xBar, 0) - f_snr_barssince(x, 0)
+    x1Bar = ta.valuewhen(x, xBar, 1) - f_snr_barssince(x, 1)
+    x2Bar = ta.valuewhen(x, xBar, 2) - f_snr_barssince(x, 2)
+    [x0, x1, x2, x0Bar, x1Bar, x2Bar]
+
+[snrS1, snrS2, snrS3, snrS1Bar, snrS2Bar, snrS3Bar] = f_snr_series(snrFixPl, snrFixPlVal, snrOffsetPl)
+[snrR1, snrR2, snrR3, snrR1Bar, snrR2Bar, snrR3Bar] = f_snr_series(snrFixPh, snrFixPhVal, snrOffsetPh)
+
+f_snr_label_line(show_, showPrice_, x1, y1, x2, y2, text_, labelcol, labelstyle, textcol, extend_, linecol, linestyle, linewidth) =>
+    if not na(close) and show_ and not na(x1) and not na(y1)
+        ln = line.new(x1, y1, x2, y2, xloc.bar_index, extend_, linecol, linestyle, linewidth)
+        line.delete(ln[1])
+        if showPrice_ and not na(y2)
+            lb = label.new(x2, y2, text_, xloc.bar_index, yloc.price, labelcol, labelstyle, textcol)
+            label.delete(lb[1])
+
+if smartSnrEnabled and smartSnrType == "Swing HiLo"
+    f_snr_label_line(true, true, bar_index + snrS1Bar, snrS1, bar_index + 10, snrS1, 'S1 -> ' + str.tostring(snrS1), smartSupLabel, label.style_label_left, smartSupText, smartSnrExtend, smartSupLine, smartSnrLineStyle, smartSnrLineWidth)
+    f_snr_label_line(true, true, bar_index + snrS2Bar, snrS2, bar_index + 10, snrS2, 'S2 -> ' + str.tostring(snrS2), smartSupLabel, label.style_label_left, smartSupText, smartSnrExtend, smartSupLine, smartSnrLineStyle, smartSnrLineWidth)
+    f_snr_label_line(true, true, bar_index + snrS3Bar, snrS3, bar_index + 10, snrS3, 'S3 -> ' + str.tostring(snrS3), smartSupLabel, label.style_label_left, smartSupText, smartSnrExtend, smartSupLine, smartSnrLineStyle, smartSnrLineWidth)
+    f_snr_label_line(true, true, bar_index + snrR1Bar, snrR1, bar_index + 10, snrR1, 'R1 -> ' + str.tostring(snrR1), smartResLabel, label.style_label_left, smartResText, smartSnrExtend, smartResLine, smartSnrLineStyle, smartSnrLineWidth)
+    f_snr_label_line(true, true, bar_index + snrR2Bar, snrR2, bar_index + 10, snrR2, 'R2 -> ' + str.tostring(snrR2), smartResLabel, label.style_label_left, smartResText, smartSnrExtend, smartResLine, smartSnrLineStyle, smartSnrLineWidth)
+    f_snr_label_line(true, true, bar_index + snrR3Bar, snrR3, bar_index + 10, snrR3, 'R3 -> ' + str.tostring(snrR3), smartResLabel, label.style_label_left, smartResText, smartSnrExtend, smartResLine, smartSnrLineStyle, smartSnrLineWidth)
+
+supportNear = not na(coreSupport) and low <= coreSupportTop + atr * entryBufferATR and high >= coreSupport - atr * signalZoneMult
+resistanceNear = not na(coreResistance) and high >= coreResistanceBottom - atr * entryBufferATR and low <= coreResistance + atr * signalZoneMult
+bsNewSupport = ta.barssince(newSupport)
+bsNewResistance = ta.barssince(newResistance)
+supportFresh = not na(coreSupport) and bsNewSupport <= pivotLen + 2
+resistanceFresh = not na(coreResistance) and bsNewResistance <= pivotLen + 2
+supportBroken = not na(coreSupport) and close < coreSupport - atr * signalZoneMult
+resistanceBroken = not na(coreResistance) and close > coreResistance + atr * signalZoneMult
+
+plotshape((showAll and showFreshZones and supportFresh and showMPZones and not na(lastSupportBar) and bar_index == lastSupportBar) ? lastSupportLevel : na,
+    title="Fresh Support", style=shape.circle, location=location.absolute, size=size.tiny, color=freshColor)
+plotshape((showAll and showFreshZones and resistanceFresh and showMPZones and not na(lastResistanceBar) and bar_index == lastResistanceBar) ? lastResistanceLevel : na,
+    title="Fresh Resistance", style=shape.circle, location=location.absolute, size=size.tiny, color=freshColor)
+
+nearSupport = not na(coreSupport) and low <= coreSupportTop + atr * entryBufferATR and close >= coreSupport - atr * signalZoneMult
+nearResistance = not na(coreResistance) and high >= coreResistanceBottom - atr * entryBufferATR and close <= coreResistance + atr * signalZoneMult
+bullTrend = emaFast > emaSlow and close > emaSlow
+bearTrend = emaFast < emaSlow and close < emaSlow
+trendBullOK = not useTrendFilter or bullTrend
+trendBearOK = not useTrendFilter or bearTrend
+mtfBullOK = not useMTFFilter or mtfBull
+mtfBearOK = not useMTFFilter or mtfBear
+rsiBullOK = not useRSI or (rsi >= rsiBullLevel and rsi > rsi[1])
+rsiBearOK = not useRSI or (rsi <= rsiBearLevel and rsi < rsi[1])
+stochBullOK = not useStoch or (stochK > stochD and stochK >= stochBullLevel)
+stochBearOK = not useStoch or (stochK < stochD and stochK <= stochBearLevel)
+rejectionBullOK = not useRejection or bullRejection
+rejectionBearOK = not useRejection or bearRejection
+
+var int lastTouchSupportBar = na
+var int lastTouchResistanceBar = na
+var bool patternCall = false
+var bool patternPut = false
+patternCall := false
+patternPut := false
+
+if nearSupport and not nearSupport[1]
+    lastTouchSupportBar := bar_index
+if nearResistance and not nearResistance[1]
+    lastTouchResistanceBar := bar_index
+
+if not na(lastTouchSupportBar)
+    since = bar_index - lastTouchSupportBar
+    if since == 3
+        c1_open = open[2]
+        c1_close = close[2]
+        c2_open = open[1]
+        c2_close = close[1]
+        c3_open = open
+        c3_close = close
+        cond1 = c1_close < c1_open
+        cond2 = c2_close > c2_open and c2_close > math.max(high[2], high[1])
+        cond3 = c3_close > c3_open and c3_close > c2_close
+        patternCall := cond1 and cond2 and cond3
+
+if not na(lastTouchResistanceBar)
+    sinceR = bar_index - lastTouchResistanceBar
+    if sinceR == 3
+        c1_open = open[2]
+        c1_close = close[2]
+        c2_open = open[1]
+        c2_close = close[1]
+        c3_open = open
+        c3_close = close
+        cond1r = c1_close > c1_open
+        cond2r = c2_close < c2_open and c2_close < math.min(low[2], low[1])
+        cond3r = c3_close < c3_open and c3_close < c2_close
+        patternPut := cond1r and cond2r and cond3r
+
+bullScoreLegacy = 0
+bullScoreLegacy += nearSupport ? 2 : 0
+bullScoreLegacy += trendBullOK ? 1 : 0
+bullScoreLegacy += mtfBullOK ? 1 : 0
+bullScoreLegacy += rsiBullOK ? 1 : 0
+bullScoreLegacy += stochBullOK ? 1 : 0
+bullScoreLegacy += rejectionBullOK ? 1 : 0
+
+bearScoreLegacy = 0
+bearScoreLegacy += nearResistance ? 2 : 0
+bearScoreLegacy += trendBearOK ? 1 : 0
+bearScoreLegacy += mtfBearOK ? 1 : 0
+bearScoreLegacy += rsiBearOK ? 1 : 0
+bearScoreLegacy += stochBearOK ? 1 : 0
+bearScoreLegacy += rejectionBearOK ? 1 : 0
+
+var int lastSignalBar = na
+cooldownOK = na(lastSignalBar) or bar_index - lastSignalBar >= 3
+callSetup = showAll and nearSupport and bullScoreLegacy >= 4 and cooldownOK and not supportBroken and patternCall
+putSetup = showAll and nearResistance and bearScoreLegacy >= 4 and cooldownOK and not resistanceBroken and patternPut
+
+if callSetup or putSetup
+    lastSignalBar := bar_index
+
+plotshape(showAll and showSignalMarkers and showLegacySetupMarkers and callSetup,
+    title="CALL Setup", text="CALL", style=shape.labelup,
+    location=location.belowbar, size=size.small, color=color.lime, textcolor=color.black)
+plotshape(showAll and showSignalMarkers and showLegacySetupMarkers and putSetup,
+    title="PUT Setup", text="PUT", style=shape.labeldown,
+    location=location.abovebar, size=size.small, color=color.red, textcolor=color.white)
+barcolor(showAll and showBarColor and callSetup ? color.lime : showAll and showBarColor and putSetup ? color.red : na)
+
+bullBreakout = useBreakout and not na(coreResistance) and close > coreResistance + atr * signalZoneMult and close > open
+bearBreakout = useBreakout and not na(coreSupport) and close < coreSupport - atr * signalZoneMult and close < open
+plotshape(showAll and showSignalMarkers and showBreakoutMarkers and bullBreakout,
+    title="Bullish Breakout", text="BO↑", style=shape.labelup,
+    location=location.belowbar, size=size.tiny, color=color.aqua, textcolor=color.black)
+plotshape(showAll and showSignalMarkers and showBreakoutMarkers and bearBreakout,
+    title="Bearish Breakout", text="BO↓", style=shape.labeldown,
+    location=location.abovebar, size=size.tiny, color=color.orange, textcolor=color.black)
+
+plot(showAll and showEMAs ? emaFast : na, "Fast EMA", color=color.new(color.aqua, 0), linewidth=1)
+plot(showAll and showEMAs ? emaSlow : na, "Slow EMA", color=color.new(color.orange, 0), linewidth=1)
+
+
+//==============================================================================
+// NEXT CANDLE PREDICTION ENGINE
+//==============================================================================
+
+bullTrendStrength = emaFast > emaSlow ? 1.0 : 0.0
+bearTrendStrength = emaFast < emaSlow ? 1.0 : 0.0
+emaSlopeBull = (emaFast - emaFast[1]) > 0 and (emaSlow - emaSlow[1]) > 0 ? 1.0 : 0.0
+emaSlopeBear = (emaFast - emaFast[1]) < 0 and (emaSlow - emaSlow[1]) < 0 ? 1.0 : 0.0
+
+trendUp = 0.0
+trendDown = 0.0
+trendUp += bullTrendStrength * 12.0
+trendUp += emaSlopeBull * 8.0
+trendDown += bearTrendStrength * 12.0
+trendDown += emaSlopeBear * 8.0
+trendUp += adxVal > 20 and adxVal < 35 ? 4.0 : adxVal >= 35 ? 6.0 : 0.0
+trendDown += adxVal > 20 and adxVal < 35 ? 4.0 : adxVal >= 35 ? 6.0 : 0.0
+if bullTrend and close > emaFast and close > emaSlow
+    trendUp += 6.0
+if bearTrend and close < emaFast and close < emaSlow
+    trendDown += 6.0
+
+momentumUp = 0.0
+momentumDown = 0.0
+momentumUp += rsi > 50 and rsi > rsi[1] ? 7.0 : 0.0
+momentumDown += rsi < 50 and rsi < rsi[1] ? 7.0 : 0.0
+momentumUp += stochK > stochD and stochK > 50 ? 4.0 : 0.0
+momentumDown += stochK < stochD and stochK < 50 ? 4.0 : 0.0
+momentumUp += close > close[1] and rsi > 52 ? 4.0 : 0.0
+momentumDown += close < close[1] and rsi < 48 ? 4.0 : 0.0
+if rsi > 70 or rsi < 30
+    momentumUp += rsi > 70 and close > close[1] ? 2.0 : 0.0
+    momentumDown += rsi < 30 and close < close[1] ? 2.0 : 0.0
+
+structureBull = false
+structureBear = false
+hh = high > high[1] and high[1] > high[2]
+hl = low > low[1] and low[1] > low[2]
+lh = high < high[1] and high[1] < high[2]
+ll = low < low[1] and low[1] < low[2]
+structureBull := hh or hl
+structureBear := lh or ll
+highestStructureHigh = ta.highest(high, structureLen)
+lowestStructureLow = ta.lowest(low, structureLen)
+structureUp = 0.0
+structureDown = 0.0
+structureUp += structureBull ? 8.0 : 0.0
+structureDown += structureBear ? 8.0 : 0.0
+structureUp += close > highestStructureHigh[1] and low > lowestStructureLow[1] ? 6.0 : 0.0
+structureDown += close < lowestStructureLow[1] and high < highestStructureHigh[1] ? 6.0 : 0.0
+
+priceUp = 0.0
+priceDown = 0.0
+priceUp += close > open and bodyRatio > bodyQualityMin and closePosition > closeBiasMin ? 8.0 : 0.0
+priceDown += close < open and bodyRatio > bodyQualityMin and closePosition < (1.0 - closeBiasMin) ? 8.0 : 0.0
+priceUp += close > open and lowerWick <= upperWick ? 3.0 : 0.0
+priceDown += close < open and upperWick <= lowerWick ? 3.0 : 0.0
+priceUp += body > atr * 0.6 and close > open ? 4.0 : 0.0
+priceDown += body > atr * 0.6 and close < open ? 4.0 : 0.0
+
+volatilityUp = 0.0
+volatilityDown = 0.0
+atrPct = atr / math.max(close, syminfo.pointvalue)
+volType = atrPct < volLowThreshold ? "LOW" : atrPct > volExtremeThreshold ? "EXTREME" : atrPct > volNormalThreshold ? "HIGH" : "NORMAL"
+volatilityUp += volType == "NORMAL" ? 5.0 : 0.0
+volatilityDown += volType == "NORMAL" ? 5.0 : 0.0
+volatilityUp += atrPct > volLowThreshold and atrPct < volNormalThreshold ? 3.0 : 0.0
+volatilityDown += atrPct > volLowThreshold and atrPct < volNormalThreshold ? 3.0 : 0.0
+if volType == "LOW"
+    volatilityUp += 1.0
+    volatilityDown += 1.0
+if volType == "EXTREME"
+    volatilityUp -= 8.0
+    volatilityDown -= 8.0
+
+mtfUp = 0.0
+mtfDown = 0.0
+mtfUp += mtfBull ? 8.0 : 0.0
+mtfDown += mtfBear ? 8.0 : 0.0
+mtfUp += mtfFast > mtfSlow and mtfRsiS > 50 ? 5.0 : 0.0
+mtfDown += mtfFast < mtfSlow and mtfRsiS < 50 ? 5.0 : 0.0
+
+locationUp = 0.0
+locationDown = 0.0
+if not na(coreSupport) and not na(coreResistance)
+    distSupport = math.abs(close - coreSupport) / math.max(atr, syminfo.mintick)
+    distResistance = math.abs(close - coreResistance) / math.max(atr, syminfo.mintick)
+    locationUp += close > coreSupport and close < coreResistance and distSupport < 1.5 and distResistance > 1.0 ? 8.0 : 0.0
+    locationDown += close < coreResistance and close > coreSupport and distResistance < 1.5 and distSupport > 1.0 ? 8.0 : 0.0
+    locationUp += close > coreSupport and close < coreResistance and close > (coreSupport + coreResistance) / 2 ? 2.0 : 0.0
+    locationDown += close < coreResistance and close > coreSupport and close < (coreSupport + coreResistance) / 2 ? 2.0 : 0.0
+if not na(coreResistance) and close > coreResistance - atr * 0.5
+    locationDown += 3.0
+if not na(coreSupport) and close < coreSupport + atr * 0.5
+    locationUp += 3.0
+
+sessionUp = useSessionFilter ? (sessionBullBias ? 4.0 : 0.0) : 2.0
+sessionDown = useSessionFilter ? (sessionBearBias ? 4.0 : 0.0) : 2.0
+
+exhaustionBullRisk = 0.0
+exhaustionBearRisk = 0.0
+exhaustionBullRisk += body > atr * exhaustionBodyMult and close > open ? 6.0 : 0.0
+exhaustionBearRisk += body > atr * exhaustionBodyMult and close < open ? 6.0 : 0.0
+exhaustionBullRisk += math.abs(close - emaFast) > atr * exhaustionDistanceMult and close > emaFast ? 6.0 : 0.0
+exhaustionBearRisk += math.abs(close - emaFast) > atr * exhaustionDistanceMult and close < emaFast ? 6.0 : 0.0
+exhaustionBullRisk += rsi > 70 and close > open ? 4.0 : 0.0
+exhaustionBearRisk += rsi < 30 and close < open ? 4.0 : 0.0
+exhaustionBullRisk += upperWick > body * 1.5 and close > open ? 3.0 : 0.0
+exhaustionBearRisk += lowerWick > body * 1.5 and close < open ? 3.0 : 0.0
+exhaustionBullRisk += not na(coreResistance) and close > coreResistance - atr * 0.35 and close < coreResistance + atr * 0.35 ? 4.0 : 0.0
+exhaustionBearRisk += not na(coreSupport) and close > coreSupport - atr * 0.35 and close < coreSupport + atr * 0.35 ? 4.0 : 0.0
+
+conflictScore = 0.0
+if mtfBull and trendUp > trendDown and (rsi < 50 or close < open or not na(coreResistance) and close > coreResistance - atr * 0.4)
+    conflictScore += 0.28
+if mtfBear and trendDown > trendUp and (rsi > 50 or close > open or not na(coreSupport) and close < coreSupport + atr * 0.4)
+    conflictScore += 0.28
+if math.abs(rsi - 50) < 5 and math.abs(close - emaFast) > atr * 1.5
+    conflictScore += 0.12
+if (trendUp > trendDown and priceDown > 0) or (trendDown > trendUp and priceUp > 0)
+    conflictScore += 0.18
+
+upScoreRaw = trendUp + momentumUp + structureUp + priceUp + volatilityUp + mtfUp + locationUp + sessionUp
+upScore = math.min(100.0, upScoreRaw)
+downScoreRaw = trendDown + momentumDown + structureDown + priceDown + volatilityDown + mtfDown + locationDown + sessionDown
+downScore = math.min(100.0, downScoreRaw)
+edge = math.abs(upScore - downScore)
+var float nextCandleQualityScore = 0.0
+nextCandleQualityScore := 50.0 + (trendUp + momentumUp + structureUp + priceUp + mtfUp + locationUp + sessionUp) * 0.35
+nextCandleQualityScore -= (trendDown + momentumDown + structureDown + priceDown + mtfDown + locationDown + sessionDown) * 0.20
+nextCandleQualityScore -= (exhaustionBullRisk + exhaustionBearRisk) * 0.75
+nextCandleQualityScore -= conflictScore * 40.0
+nextCandleQualityScore := math.max(0.0, math.min(100.0, nextCandleQualityScore))
+
+conflictDetected = conflictScore >= maxConflict
+isExhaustion = (exhaustionBullRisk + exhaustionBearRisk) >= 18.0
+
+bullishPressure = close > emaFast and close > emaSlow and rsi > 50 and stochK > 50
+bearishPressure = close < emaFast and close < emaSlow and rsi < 50 and stochK < 50
+
+upSignal = (upScore > downScore and edge >= minEdge and nextCandleQualityScore >= minQuality and not conflictDetected and not isExhaustion) or (upScore >= downScore and bullishPressure and edge >= minEdge and nextCandleQualityScore >= minQuality - 5 and not conflictDetected and not isExhaustion)
+
+downSignal = (downScore > upScore and edge >= minEdge and nextCandleQualityScore >= minQuality and not conflictDetected and not isExhaustion) or (downScore >= upScore and bearishPressure and edge >= minEdge and nextCandleQualityScore >= minQuality - 5 and not conflictDetected and not isExhaustion)
+strongUp = upSignal and edge >= strongEdge and nextCandleQualityScore >= strongQuality and not conflictDetected and not isExhaustion
+strongDown = downSignal and edge >= strongEdge and nextCandleQualityScore >= strongQuality and not conflictDetected and not isExhaustion
+
+finalSignal = "NO TRADE"
+if strongUp
+    finalSignal := "STRONG UP"
+else if upSignal
+    finalSignal := "UP"
+else if strongDown
+    finalSignal := "STRONG DOWN"
+else if downSignal
+    finalSignal := "DOWN"
+
+finalSignalNoTrade = finalSignal == "NO TRADE"
+finalSignalDirection = finalSignal == "UP" or finalSignal == "STRONG UP" ? "UP" : finalSignal == "DOWN" or finalSignal == "STRONG DOWN" ? "DOWN" : "NO TRADE"
+
+var string nextCandleSignal = "NO TRADE"
+var string nextCandleReason = "No trade: insufficient evidence"
+var float nextCandleUpScore = 0.0
+var float nextCandleDownScore = 0.0
+var float nextCandleEdge = 0.0
+var float nextCandleQuality = 0.0
+var bool signalChanged = false
+
+if barstate.isconfirmed
+    nextCandleUpScore := upScore
+    nextCandleDownScore := downScore
+    nextCandleEdge := edge
+    nextCandleQuality := nextCandleQualityScore
+    nextCandleSignal := finalSignalDirection
+    if finalSignalDirection == "NO TRADE"
+        nextCandleReason := "Insufficient edge, poor market quality, conflict, or exhaustion risk"
+        if conflictDetected
+            nextCandleReason := "Conflict detected: mixed HTF/trend/momentum structure"
+        if isExhaustion
+            nextCandleReason := "Exhaustion risk: premium expansion and fading follow-through"
+    else
+        nextCandleReason := (finalSignalDirection == "UP" ? "HTF bullish; EMA alignment; RSI rising; structure supportive; location favorable" : "HTF bearish; EMA alignment; RSI falling; structure supportive; location favorable")
+        if strongUp or strongDown
+            nextCandleReason := nextCandleReason + "; strong directional edge"
+    signalChanged := nextCandleSignal != nextCandleSignal[1]
+
+signalLabel = nextCandleSignal == "UP" or nextCandleSignal == "STRONG UP" ? "↑" : nextCandleSignal == "DOWN" or nextCandleSignal == "STRONG DOWN" ? "↓" : "•"
+
+nextSignalText = nextCandleSignal == "UP" ? "BUY" : nextCandleSignal == "DOWN" ? "SELL" : "WAIT"
+
+plotshape(showAll and showSignalMarkers and nextCandleSignal == "UP" ? high : na,
+    title="Next Candle UP",
+    text="BUY",
+    style=shape.labelup,
+    location=location.belowbar,
+    color=color.new(color.lime, 10),
+    textcolor=color.white,
+    size=size.small)
+
+plotshape(showAll and showSignalMarkers and nextCandleSignal == "DOWN" ? low : na,
+    title="Next Candle DOWN",
+    text="SELL",
+    style=shape.labeldown,
+    location=location.abovebar,
+    color=color.new(color.red, 10),
+    textcolor=color.white,
+    size=size.small)
+
+plotshape(showAll and showSignalMarkers and showNoTradeMarker and nextCandleSignal == "NO TRADE" ? close : na,
+    title="Next Candle NO TRADE",
+    text="WAIT",
+    style=shape.labeldown,
+    location=location.abovebar,
+    color=color.new(color.gray, 15),
+    textcolor=color.white,
+    size=size.tiny)
+
+alertcondition(showAlerts and nextCandleSignal == "UP" and signalChanged, title="Next Candle UP", message="MP SR Zone: next candle bias is UP")
+alertcondition(showAlerts and nextCandleSignal == "DOWN" and signalChanged, title="Next Candle DOWN", message="MP SR Zone: next candle bias is DOWN")
+alertcondition(showAlerts and nextCandleSignal == "NO TRADE" and signalChanged, title="Next Candle NO TRADE", message="MP SR Zone: no trade, low quality or conflicting evidence")
+
+//==============================================================================
+// DASHBOARD
+//==============================================================================
+var table dash = table.new(position.top_right, 2, 12, border_width=1)
+
+biasText = bullTrend ? "BULLISH" : bearTrend ? "BEARISH" : "NEUTRAL"
+mtfText = mtfBull ? "HTF BULL" : mtfBear ? "HTF BEAR" : "HTF FLAT"
+zoneText = nearSupport ? "SUPPORT" : nearResistance ? "RESISTANCE" : "WAIT"
+
+if barstate.islast and showDashboard
+    table.cell(dash, 0, 0, "MP SR ZONE", text_color=color.white, bgcolor=color.new(color.blue, 20))
+    table.cell(dash, 1, 0, "Next Candle", text_color=color.white, bgcolor=color.new(color.blue, 20))
+    table.cell(dash, 0, 1, "Signal")
+    table.cell(dash, 1, 1, nextCandleSignal)
+    table.cell(dash, 0, 2, "Strength")
+    table.cell(dash, 1, 2, str.tostring(math.round(nextCandleEdge)) + " / " + str.tostring(math.round(nextCandleQuality)))
+    table.cell(dash, 0, 3, "Trend")
+    table.cell(dash, 1, 3, biasText)
+    table.cell(dash, 0, 4, "HTF")
+    table.cell(dash, 1, 4, mtfText)
+    table.cell(dash, 0, 5, "Market")
+    table.cell(dash, 1, 5, marketClockText)
+    table.cell(dash, 0, 6, "UP")
+    table.cell(dash, 1, 6, str.tostring(math.round(nextCandleUpScore)))
+    table.cell(dash, 0, 7, "DOWN")
+    table.cell(dash, 1, 7, str.tostring(math.round(nextCandleDownScore)))
+    table.cell(dash, 0, 8, "EDGE")
+    table.cell(dash, 1, 8, str.tostring(math.round(nextCandleEdge)))
+    table.cell(dash, 0, 9, "Quality")
+    table.cell(dash, 1, 9, str.tostring(math.round(nextCandleQuality)))
+    table.cell(dash, 0, 10, "RSI")
+    table.cell(dash, 1, 10, str.tostring(rsi, "#.0"))
+    table.cell(dash, 0, 11, "Session")
+    table.cell(dash, 1, 11, sessionLabel)
+
+if showReasonCodes and barstate.islast
+    label.new(bar_index, high, text=nextCandleReason, style=label.style_label_left, color=color.new(color.white, 0), textcolor=color.white, yloc=yloc.price, size=size.tiny)
+
+//==============================================================================
+// LEGACY PLOT / ALERTS compatibility
+//==============================================================================
+alertcondition(callSetup, title="MP CALL Setup", message="MP SR Zone: CALL setup detected near support ")
+alertcondition(putSetup, title="MP PUT Setup", message="MP SR Zone: PUT setup detected near resistance ")
+alertcondition(bullBreakout, title="MP Bullish Breakout", message="MP SR Zone: bullish breakout setup detected")
+alertcondition(bearBreakout, title="MP Bearish Breakout", message="MP SR Zone: bearish breakout setup detected")
+
+//==============================================================================
+// MP ENGULFING FIB LEVELS — 5m / 15m / 30m / 45m ONLY
+//==============================================================================
+
+engulf_get_line_style(style_string) =>
+    switch style_string
+        "Solid" => line.style_solid
+        "Dashed" => line.style_dashed
+        "Dotted" => line.style_dotted
+        => line.style_solid
+
+engulf_timeframe_to_minutes(tf_string) =>
+    if tf_string == "" or tf_string == "chart"
+        timeframe.in_seconds() / 60
+    else if tf_string == "1"
+        1
+    else if tf_string == "5"
+        5
+    else if tf_string == "15"
+        15
+    else if tf_string == "30"
+        30
+    else if tf_string == "45"
+        45
+    else if tf_string == "60"
+        60
+    else if tf_string == "240"
+        240
+    else if tf_string == "D"
+        1440
+    else if tf_string == "W"
+        10080
+    else if tf_string == "M"
+        43200
+    else
+        not na(str.tonumber(tf_string)) ? str.tonumber(tf_string) : timeframe.in_seconds() / 60
+
+engulf_is_higher_timeframe(tf_string) =>
+    current_tf_minutes = timeframe.in_seconds() / 60
+    target_tf_minutes = engulf_timeframe_to_minutes(tf_string)
+    target_tf_minutes >= current_tf_minutes
+
+engulf_is_bullish_engulfing() =>
+    current_bullish = close > open
+    previous_bearish = engulfFilterEngulfing ? close[1] < open[1] : true
+    current_low_below_prev_low = low < low[1]
+    current_close_above_prev_open = close > open[1]
+    current_bullish and previous_bearish and current_low_below_prev_low and current_close_above_prev_open
+
+engulf_is_bearish_engulfing() =>
+    current_bearish = close < open
+    previous_bullish = engulfFilterEngulfing ? close[1] > open[1] : true
+    current_high_above_prev_high = high > high[1]
+    current_close_below_prev_open = close < open[1]
+    current_bearish and previous_bullish and current_high_above_prev_high and current_close_below_prev_open
+
+engulf_get_engulfing_data() =>
+    bull_engulf = engulf_is_bullish_engulfing()
+    bear_engulf = engulf_is_bearish_engulfing()
+    bull_engulf_prev = engulf_is_bullish_engulfing()[1]
+    bear_engulf_prev = engulf_is_bearish_engulfing()[1]
+    [bull_engulf, bear_engulf, bull_engulf_prev, bear_engulf_prev]
+
+engulf_get_fib_data() =>
+    [open, high, low, close, time, time_close]
+
+var array<line> engulf_tf5_fib_lines = array.new<line>()
+var array<label> engulf_tf5_fib_labels = array.new<label>()
+var array<line> engulf_tf15_fib_lines = array.new<line>()
+var array<label> engulf_tf15_fib_labels = array.new<label>()
+var array<line> engulf_tf30_fib_lines = array.new<line>()
+var array<label> engulf_tf30_fib_labels = array.new<label>()
+var array<line> engulf_tf45_fib_lines = array.new<line>()
+var array<label> engulf_tf45_fib_labels = array.new<label>()
+
+engulf_delete_fib_lines(fib_lines, fib_labels) =>
+    if not engulfKeepPrevLevels
+        if array.size(fib_lines) > 0
+            for i = 0 to array.size(fib_lines) - 1
+                line.delete(array.get(fib_lines, i))
+        array.clear(fib_lines)
+        if array.size(fib_labels) > 0
+            for i = 0 to array.size(fib_labels) - 1
+                label.delete(array.get(fib_labels, i))
+        array.clear(fib_labels)
+
+engulf_create_fibonacci_lines(is_bullish, fib_high, fib_low, start_time, end_time, tf_string, fib_lines, fib_labels) =>
+    engulf_delete_fib_lines(fib_lines, fib_labels)
+    price_range = fib_high - fib_low
+    fib_0 = is_bullish ? fib_low : fib_high
+    fib_25 = is_bullish ? fib_low + (price_range * 0.25) : fib_high - (price_range * 0.25)
+    fib_50 = is_bullish ? fib_low + (price_range * 0.50) : fib_high - (price_range * 0.50)
+    fib_75 = is_bullish ? fib_low + (price_range * 0.75) : fib_high - (price_range * 0.75)
+    fib_100 = is_bullish ? fib_high : fib_low
+    line_extend = engulfExtendLines ? extend.right : extend.none
+
+    line_0 = line.new(start_time, fib_0, end_time, fib_0, color=engulfFib0Color, style=engulf_get_line_style(engulfFib0Style), extend=line_extend, xloc=xloc.bar_time)
+    array.push(fib_lines, line_0)
+    line_25 = line.new(start_time, fib_25, end_time, fib_25, color=engulfFib25Color, style=engulf_get_line_style(engulfFib25Style), extend=line_extend, xloc=xloc.bar_time)
+    array.push(fib_lines, line_25)
+    line_50 = line.new(start_time, fib_50, end_time, fib_50, color=engulfFib50Color, style=engulf_get_line_style(engulfFib50Style), extend=line_extend, xloc=xloc.bar_time)
+    array.push(fib_lines, line_50)
+    line_75 = line.new(start_time, fib_75, end_time, fib_75, color=engulfFib75Color, style=engulf_get_line_style(engulfFib75Style), extend=line_extend, xloc=xloc.bar_time)
+    array.push(fib_lines, line_75)
+    line_100 = line.new(start_time, fib_100, end_time, fib_100, color=engulfFib100Color, style=engulf_get_line_style(engulfFib100Style), extend=line_extend, xloc=xloc.bar_time)
+    array.push(fib_lines, line_100)
+
+    if engulfShowLabel
+        label_text = tf_string + " Fib"
+        tf_label = label.new(start_time, fib_0, text=label_text, style=label.style_label_left, color=color.new(color.black, 80), textcolor=color.white, size=size.small, xloc=xloc.bar_time)
+        array.push(fib_labels, tf_label)
+
+[engulf5_fib_open, engulf5_fib_high, engulf5_fib_low, engulf5_fib_close, engulf5_fib_time, engulf5_fib_time_close] = if engulfShowLevels and engulfTf5Enabled and engulf_is_higher_timeframe("5")
+    request.security(syminfo.tickerid, "5", engulf_get_fib_data(), lookahead=barmerge.lookahead_on)
+else
+    [open, high, low, close, time, time_close]
+
+[engulf15_fib_open, engulf15_fib_high, engulf15_fib_low, engulf15_fib_close, engulf15_fib_time, engulf15_fib_time_close] = if engulfShowLevels and engulfTf15Enabled and engulf_is_higher_timeframe("15")
+    request.security(syminfo.tickerid, "15", engulf_get_fib_data(), lookahead=barmerge.lookahead_on)
+else
+    [open, high, low, close, time, time_close]
+
+[engulf30_fib_open, engulf30_fib_high, engulf30_fib_low, engulf30_fib_close, engulf30_fib_time, engulf30_fib_time_close] = if engulfShowLevels and engulfTf30Enabled and engulf_is_higher_timeframe("30")
+    request.security(syminfo.tickerid, "30", engulf_get_fib_data(), lookahead=barmerge.lookahead_on)
+else
+    [open, high, low, close, time, time_close]
+
+[engulf45_fib_open, engulf45_fib_high, engulf45_fib_low, engulf45_fib_close, engulf45_fib_time, engulf45_fib_time_close] = if engulfShowLevels and engulfTf45Enabled and engulf_is_higher_timeframe("45")
+    request.security(syminfo.tickerid, "45", engulf_get_fib_data(), lookahead=barmerge.lookahead_on)
+else
+    [open, high, low, close, time, time_close]
+
+[engulf5_bull_engulf, engulf5_bear_engulf, engulf5_bull_engulf_prev, engulf5_bear_engulf_prev] = if engulfShowLevels and engulfTf5Enabled and engulf_is_higher_timeframe("5")
+    request.security(syminfo.tickerid, "5", engulf_get_engulfing_data(), lookahead=barmerge.lookahead_on)
+else
+    [false, false, false, false]
+
+[engulf15_bull_engulf, engulf15_bear_engulf, engulf15_bull_engulf_prev, engulf15_bear_engulf_prev] = if engulfShowLevels and engulfTf15Enabled and engulf_is_higher_timeframe("15")
+    request.security(syminfo.tickerid, "15", engulf_get_engulfing_data(), lookahead=barmerge.lookahead_on)
+else
+    [false, false, false, false]
+
+[engulf30_bull_engulf, engulf30_bear_engulf, engulf30_bull_engulf_prev, engulf30_bear_engulf_prev] = if engulfShowLevels and engulfTf30Enabled and engulf_is_higher_timeframe("30")
+    request.security(syminfo.tickerid, "30", engulf_get_engulfing_data(), lookahead=barmerge.lookahead_on)
+else
+    [false, false, false, false]
+
+[engulf45_bull_engulf, engulf45_bear_engulf, engulf45_bull_engulf_prev, engulf45_bear_engulf_prev] = if engulfShowLevels and engulfTf45Enabled and engulf_is_higher_timeframe("45")
+    request.security(syminfo.tickerid, "45", engulf_get_engulfing_data(), lookahead=barmerge.lookahead_on)
+else
+    [false, false, false, false]
+
+engulf5_bull_confirmed = engulf5_bull_engulf_prev
+engulf5_bear_confirmed = engulf5_bear_engulf_prev
+engulf15_bull_confirmed = engulf15_bull_engulf_prev
+engulf15_bear_confirmed = engulf15_bear_engulf_prev
+engulf30_bull_confirmed = engulf30_bull_engulf_prev
+engulf30_bear_confirmed = engulf30_bear_engulf_prev
+engulf45_bull_confirmed = engulf45_bull_engulf_prev
+engulf45_bear_confirmed = engulf45_bear_engulf_prev
+
+if engulfShowLevels and engulfTf5Enabled and engulf_is_higher_timeframe("5") and (engulf5_bull_confirmed or engulf5_bear_confirmed)
+    is_bullish = engulf5_bull_confirmed
+    engulf_high = engulf5_fib_high[1]
+    engulf_low = engulf5_fib_low[1]
+    start_time = engulf5_fib_time[1]
+    end_time = engulf5_fib_time_close
+    engulf_create_fibonacci_lines(is_bullish, engulf_high, engulf_low, start_time, end_time, "5", engulf_tf5_fib_lines, engulf_tf5_fib_labels)
+
+if engulfShowLevels and engulfTf15Enabled and engulf_is_higher_timeframe("15") and (engulf15_bull_confirmed or engulf15_bear_confirmed)
+    is_bullish = engulf15_bull_confirmed
+    engulf_high = engulf15_fib_high[1]
+    engulf_low = engulf15_fib_low[1]
+    start_time = engulf15_fib_time[1]
+    end_time = engulf15_fib_time_close
+    engulf_create_fibonacci_lines(is_bullish, engulf_high, engulf_low, start_time, end_time, "15", engulf_tf15_fib_lines, engulf_tf15_fib_labels)
+
+if engulfShowLevels and engulfTf30Enabled and engulf_is_higher_timeframe("30") and (engulf30_bull_confirmed or engulf30_bear_confirmed)
+    is_bullish = engulf30_bull_confirmed
+    engulf_high = engulf30_fib_high[1]
+    engulf_low = engulf30_fib_low[1]
+    start_time = engulf30_fib_time[1]
+    end_time = engulf30_fib_time_close
+    engulf_create_fibonacci_lines(is_bullish, engulf_high, engulf_low, start_time, end_time, "30", engulf_tf30_fib_lines, engulf_tf30_fib_labels)
+
+if engulfShowLevels and engulfTf45Enabled and engulf_is_higher_timeframe("45") and (engulf45_bull_confirmed or engulf45_bear_confirmed)
+    is_bullish = engulf45_bull_confirmed
+    engulf_high = engulf45_fib_high[1]
+    engulf_low = engulf45_fib_low[1]
+    start_time = engulf45_fib_time[1]
+    end_time = engulf45_fib_time_close
+    engulf_create_fibonacci_lines(is_bullish, engulf_high, engulf_low, start_time, end_time, "45", engulf_tf45_fib_lines, engulf_tf45_fib_labels)
+
+engulf_current_bull = close > open and (engulfFilterEngulfing ? close[1] < open[1] : true) and low < low[1] and close > open[1]
+engulf_current_bear = close < open and (engulfFilterEngulfing ? close[1] > open[1] : true) and high > high[1] and close < open[1]
+engulf_current_bull_prev = engulf_current_bull[1]
+engulf_current_bear_prev = engulf_current_bear[1]
+
+engulf_get_tf_status(bull_confirmed, bear_confirmed, bull_unconfirmed, bear_unconfirmed) =>
+    if bull_confirmed or bull_unconfirmed
+        "Bull"
+    else if bear_confirmed or bear_unconfirmed
+        "Bear"
+    else
+        "Flat"
+
+engulf_get_table_position(pos_string) =>
+    switch pos_string
+        "top_left" => position.top_left
+        "top_center" => position.top_center
+        "top_right" => position.top_right
+        "middle_left" => position.middle_left
+        "middle_center" => position.middle_center
+        "middle_right" => position.middle_right
+        "bottom_left" => position.bottom_left
+        "bottom_center" => position.bottom_center
+        "bottom_right" => position.bottom_right
+        => position.middle_right
+
+engulf_get_text_size(size_string) =>
+    switch size_string
+        "large" => size.large
+        "normal" => size.normal
+        "small" => size.small
+        "tiny" => size.tiny
+        => size.small
+
+var table engulf_watch_table = na
+
+if barstate.islast and engulfShowLevels and engulfTableEnabled
+    active_tf_count = 0
+    if engulfTf5Enabled and engulf_is_higher_timeframe("5")
+        active_tf_count += 1
+    if engulfTf15Enabled and engulf_is_higher_timeframe("15")
+        active_tf_count += 1
+    if engulfTf30Enabled and engulf_is_higher_timeframe("30")
+        active_tf_count += 1
+    if engulfTf45Enabled and engulf_is_higher_timeframe("45")
+        active_tf_count += 1
+
+    if active_tf_count > 0
+        if not na(engulf_watch_table)
+            table.delete(engulf_watch_table)
+        rows = 1 + active_tf_count + 1
+        engulf_watch_table := table.new(engulf_get_table_position(engulfTablePosition), 2, rows, bgcolor=color.new(color.black, 80), border_width=1)
+        table.cell(engulf_watch_table, 0, 0, "WATCHING TF", text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=color.new(color.black, 70))
+        table.merge_cells(engulf_watch_table, 0, 0, 1, 0)
+        row_index = 1
+        table.cell(engulf_watch_table, 0, row_index, "TF", text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=color.new(color.black, 70))
+        table.cell(engulf_watch_table, 1, row_index, "Status", text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=color.new(color.black, 70))
+        row_index += 1
+
+        if engulfTf5Enabled and engulf_is_higher_timeframe("5")
+            tf5_status = engulf_get_tf_status(engulf5_bull_confirmed, engulf5_bear_confirmed, engulf5_bull_engulf, engulf5_bear_engulf)
+            tf5_bg = tf5_status == "Bull" ? color.new(color.green, 60) : tf5_status == "Bear" ? color.new(color.red, 60) : color.new(color.gray, 60)
+            table.cell(engulf_watch_table, 0, row_index, "5m", text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=color.new(color.black, 90))
+            table.cell(engulf_watch_table, 1, row_index, tf5_status, text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=tf5_bg)
+            row_index += 1
+
+        if engulfTf15Enabled and engulf_is_higher_timeframe("15")
+            tf15_status = engulf_get_tf_status(engulf15_bull_confirmed, engulf15_bear_confirmed, engulf15_bull_engulf, engulf15_bear_engulf)
+            tf15_bg = tf15_status == "Bull" ? color.new(color.green, 60) : tf15_status == "Bear" ? color.new(color.red, 60) : color.new(color.gray, 60)
+            table.cell(engulf_watch_table, 0, row_index, "15m", text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=color.new(color.black, 90))
+            table.cell(engulf_watch_table, 1, row_index, tf15_status, text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=tf15_bg)
+            row_index += 1
+
+        if engulfTf30Enabled and engulf_is_higher_timeframe("30")
+            tf30_status = engulf_get_tf_status(engulf30_bull_confirmed, engulf30_bear_confirmed, engulf30_bull_engulf, engulf30_bear_engulf)
+            tf30_bg = tf30_status == "Bull" ? color.new(color.green, 60) : tf30_status == "Bear" ? color.new(color.red, 60) : color.new(color.gray, 60)
+            table.cell(engulf_watch_table, 0, row_index, "30m", text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=color.new(color.black, 90))
+            table.cell(engulf_watch_table, 1, row_index, tf30_status, text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=tf30_bg)
+            row_index += 1
+
+        if engulfTf45Enabled and engulf_is_higher_timeframe("45")
+            tf45_status = engulf_get_tf_status(engulf45_bull_confirmed, engulf45_bear_confirmed, engulf45_bull_engulf, engulf45_bear_engulf)
+            tf45_bg = tf45_status == "Bull" ? color.new(color.green, 60) : tf45_status == "Bear" ? color.new(color.red, 60) : color.new(color.gray, 60)
+            table.cell(engulf_watch_table, 0, row_index, "45m", text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=color.new(color.black, 90))
+            table.cell(engulf_watch_table, 1, row_index, tf45_status, text_color=color.white, text_size=engulf_get_text_size(engulfTableTextSize), bgcolor=tf45_bg)
+            row_index += 1
+else
+    if not na(engulf_watch_table)
+        table.delete(engulf_watch_table)
+        engulf_watch_table := na
+
+plotshape(engulfPatternMarkers and engulf_current_bull ? low : na,
+    title="Bullish Engulfing", text="Bull", style=shape.labelup,
+    location=location.belowbar, color=color.new(color.green, 15), textcolor=color.white, size=size.tiny)
+
+plotshape(engulfPatternMarkers and engulf_current_bear ? high : na,
+    title="Bearish Engulfing", text="Bear", style=shape.labeldown,
+    location=location.abovebar, color=color.new(color.red, 15), textcolor=color.white, size=size.tiny)
+
+barcolor(engulfBarColor and engulf_current_bull ? color.new(color.green, 18) : engulfBarColor and engulf_current_bear ? color.new(color.red, 18) : na)
+
+alertcondition(engulfPatternAlerts and engulf_current_bull and not engulf_current_bull_prev, title="Bullish Engulfing", message="MP SR Zone: Bullish Engulfing detected")
+alertcondition(engulfPatternAlerts and engulf_current_bear and not engulf_current_bear_prev, title="Bearish Engulfing", message="MP SR Zone: Bearish Engulfing detected")
+
+//==============================================================================
+// END — MP ENGULFING FIB LEVELS
+//==============================================================================

@@ -29,6 +29,7 @@ showMPZones = input.bool(true, "Show MP zones", group="02 • Scalping Zone Engi
 showSupport = input.bool(true, "Show support", group="02 • Scalping Zone Engine")
 showResistance = input.bool(true, "Show resistance", group="02 • Scalping Zone Engine")
 showHighVolumeZones = input.bool(true, "Show high-volume boxes", group="02 • Scalping Zone Engine")
+showHighVolumeBoxLabels = input.bool(true, "Show high-volume box labels", group="02 • Scalping Zone Engine")
 showATRZones = input.bool(false, "Show ATR zones", group="02 • Scalping Zone Engine")
 showCandleZones = input.bool(false, "Show candle zones", group="02 • Scalping Zone Engine")
 showTouchZones = input.bool(false, "Show touch zones", group="02 • Scalping Zone Engine")
@@ -37,6 +38,7 @@ showComposite = input.bool(false, "Show composite zone", group="02 • Scalping 
 showFreshZones = input.bool(true, "Show fresh zones", group="02 • Scalping Zone Engine")
 showClassic = input.bool(false, "Show classic S/R", group="02 • Scalping Zone Engine")
 showTrendlines = input.bool(false, "Show trendlines", group="02 • Scalping Zone Engine")
+showTrendlineSwingMarkers = input.bool(true, "Show latest swing markers", group="02 • Scalping Zone Engine")
 showZigzag = input.bool(false, "Show zigzag", group="02 • Scalping Zone Engine")
 pivotLen = input.int(3, "Pivot length", minval=2, maxval=20, group="02 • Scalping Zone Engine")
 atrLen = input.int(14, "ATR length", minval=5, maxval=50, group="02 • Scalping Zone Engine")
@@ -45,7 +47,9 @@ signalZoneMult = input.float(0.30, "Signal zone multiplier", step=0.01, group="0
 zoneExtend = input.int(40, "Zone extend bars", minval=10, maxval=200, group="02 • Scalping Zone Engine")
 maxZonesSide = input.int(2, "Max zone count", minval=1, maxval=10, group="02 • Scalping Zone Engine")
 volBoxFilterLen = input.int(2, "High-volume filter", minval=1, maxval=20, group="02 • Scalping Zone Engine")
-volBoxWidth = input.float(1.0, "High-volume box width", minval=0.1, maxval=10.0, step=0.1, group="02 • Scalping Zone Engine")
+volBoxWidth = input.float(0.20, "High-volume half-width (ATR)", minval=0.05, maxval=3.0, step=0.05, group="02 • Scalping Zone Engine")
+volBoxExtend = input.int(16, "High-volume box length (bars)", minval=1, maxval=200, group="02 • Scalping Zone Engine")
+volBoxTransparency = input.int(96, "High-volume box transparency", minval=0, maxval=100, group="02 • Scalping Zone Engine")
 
 //----------------------------------------------------------------------------- 
 // SMART SNR
@@ -58,10 +62,10 @@ smartSnrLineStyle = smartSnrLineStyleI == "Solid" ? line.style_solid : smartSnrL
 smartSnrLineWidth = input.int(1, "Linewidth", minval=1, maxval=5, group="02 • Scalping Zone Engine")
 smartSnrExtendI = input.string("None", "Line Extend", options=["None", "Left", "Right", "Both"], group="02 • Scalping Zone Engine")
 smartSnrExtend = smartSnrExtendI == "None" ? extend.none : smartSnrExtendI == "Left" ? extend.left : smartSnrExtendI == "Both" ? extend.both : extend.right
-smartSupLabel = input.color(color.new(color.black, 90), "Support Label", group="02 • Scalping Zone Engine", inline="1")
+smartSupLabel = input.color(color.new(color.black, 15), "Support Label", group="02 • Scalping Zone Engine", inline="1")
 smartSupText = input.color(color.red, "Text", group="02 • Scalping Zone Engine", inline="1")
 smartSupLine = input.color(color.red, "Line", group="02 • Scalping Zone Engine", inline="1")
-smartResLabel = input.color(color.new(color.black, 90), "Resistance Label", group="02 • Scalping Zone Engine", inline="2")
+smartResLabel = input.color(color.new(color.black, 15), "Resistance Label", group="02 • Scalping Zone Engine", inline="2")
 smartResText = input.color(color.blue, "Text", group="02 • Scalping Zone Engine", inline="2")
 smartResLine = input.color(color.blue, "Line", group="02 • Scalping Zone Engine", inline="2")
 
@@ -177,6 +181,85 @@ engulfPatternMarkers = input.bool(true, "Show engulfing markers", group=engulfLe
 engulfBarColor = input.bool(true, "Color bars on engulfing", group=engulfLevelGroup)
 engulfPatternAlerts = input.bool(true, "Enable engulfing alerts", group=engulfLevelGroup)
 
+//-----------------------------------------------------------------------------
+// ORDER BLOCK FINDER
+//-----------------------------------------------------------------------------
+orderBlockGroup = "19 • Order Block Finder"
+obColorScheme = input.string("DARK", "Color scheme", options=["DARK", "BRIGHT"], group=orderBlockGroup)
+obPeriods = input.int(5, "Relevant periods", minval=1, maxval=50, group=orderBlockGroup)
+obThreshold = input.float(0.0, "Minimum move (%)", minval=0.0, step=0.1, group=orderBlockGroup)
+obUseWicks = input.bool(false, "Use full high/low range", group=orderBlockGroup)
+obShowMarkers = input.bool(true, "Show detected OB markers", group=orderBlockGroup)
+obShowVolume = input.bool(true, "Show source candle volume", group=orderBlockGroup)
+obShowBullChannel = input.bool(true, "Show latest bullish channel", group=orderBlockGroup)
+obShowBearChannel = input.bool(true, "Show latest bearish channel", group=orderBlockGroup)
+obFillTransparency = input.int(84, "Zone fill transparency", minval=0, maxval=100, group=orderBlockGroup)
+obShowPanel = input.bool(false, "Show latest OB panel", group=orderBlockGroup)
+obPanelPositionInput = input.string("middle_right", "Panel position", options=["top_left", "top_center", "top_right", "middle_left", "middle_center", "middle_right", "bottom_left", "bottom_center", "bottom_right"], group=orderBlockGroup)
+obShowDocumentation = input.bool(false, "Show documentation tooltip", group=orderBlockGroup)
+obEnableAlerts = input.bool(true, "Enable OB alerts", group=orderBlockGroup)
+
+//-----------------------------------------------------------------------------
+// FAIR VALUE GAPS AND IMBALANCES
+//-----------------------------------------------------------------------------
+fvgGroup = "20 • FVG & Imbalances"
+showBullFvg = input.bool(true, "Show bullish FVGs", group=fvgGroup)
+bullFvgCount = input.int(1, "Bullish FVGs to keep", minval=1, maxval=20, group=fvgGroup)
+bullFvgColor = input.color(color.green, "Bullish FVG color", group=fvgGroup)
+bullFvgExtend = input.string("Default", "Bullish FVG extension", options=["None", "Limited", "Default"], group=fvgGroup)
+bullFvgExtendBars = input.int(8, "Bullish FVG limited bars", minval=1, maxval=100, group=fvgGroup)
+showBearFvg = input.bool(true, "Show bearish FVGs", group=fvgGroup)
+bearFvgCount = input.int(1, "Bearish FVGs to keep", minval=1, maxval=20, group=fvgGroup)
+bearFvgColor = input.color(color.red, "Bearish FVG color", group=fvgGroup)
+bearFvgExtend = input.string("Default", "Bearish FVG extension", options=["None", "Limited", "Default"], group=fvgGroup)
+bearFvgExtendBars = input.int(8, "Bearish FVG limited bars", minval=1, maxval=100, group=fvgGroup)
+showBullImbalance = input.bool(false, "Show bullish imbalances", group=fvgGroup)
+bullImbalanceCount = input.int(1, "Bullish imbalances to keep", minval=1, maxval=20, group=fvgGroup)
+bullImbalanceColor = input.color(color.green, "Bullish imbalance color", group=fvgGroup)
+bullImbalanceExtend = input.string("Default", "Bullish imbalance extension", options=["None", "Limited", "Default"], group=fvgGroup)
+bullImbalanceExtendBars = input.int(8, "Bullish imbalance limited bars", minval=1, maxval=100, group=fvgGroup)
+showBearImbalance = input.bool(false, "Show bearish imbalances", group=fvgGroup)
+bearImbalanceCount = input.int(1, "Bearish imbalances to keep", minval=1, maxval=20, group=fvgGroup)
+bearImbalanceColor = input.color(color.red, "Bearish imbalance color", group=fvgGroup)
+bearImbalanceExtend = input.string("Default", "Bearish imbalance extension", options=["None", "Limited", "Default"], group=fvgGroup)
+bearImbalanceExtendBars = input.int(8, "Bearish imbalance limited bars", minval=1, maxval=100, group=fvgGroup)
+fvgTransparency = input.int(90, "Gap fill transparency", minval=0, maxval=100, group=fvgGroup)
+
+//-----------------------------------------------------------------------------
+// SWING LEVELS AND TARGET
+//-----------------------------------------------------------------------------
+swingLevelGroup = "21 • Swing Levels & Target"
+showSwingHighLevels = input.bool(true, "Show swing highs", group=swingLevelGroup)
+swingHighCount = input.int(1, "Swing highs to keep", minval=1, maxval=20, group=swingLevelGroup)
+swingHighColor = input.color(color.green, "Swing high color", group=swingLevelGroup)
+swingHighExtend = input.string("Default", "Swing high extension", options=["None", "Limited", "Default"], group=swingLevelGroup)
+swingHighExtendBars = input.int(8, "Swing high limited bars", minval=1, maxval=100, group=swingLevelGroup)
+showSwingLowLevels = input.bool(true, "Show swing lows", group=swingLevelGroup)
+swingLowCount = input.int(1, "Swing lows to keep", minval=1, maxval=20, group=swingLevelGroup)
+swingLowColor = input.color(color.red, "Swing low color", group=swingLevelGroup)
+swingLowExtend = input.string("Default", "Swing low extension", options=["None", "Limited", "Default"], group=swingLevelGroup)
+swingLowExtendBars = input.int(8, "Swing low limited bars", minval=1, maxval=100, group=swingLevelGroup)
+showNextTarget = input.bool(true, "Show next target", group=swingLevelGroup)
+nextTargetHighColor = input.color(color.red, "Target above price color", group=swingLevelGroup)
+nextTargetLowColor = input.color(color.red, "Target below price color", group=swingLevelGroup)
+
+//-----------------------------------------------------------------------------
+// PREVIOUS 4H / DAILY / WEEKLY / MONTHLY LEVELS
+//-----------------------------------------------------------------------------
+previousLevelsGroup = "22 • Previous HTF High / Low"
+showPrev4hHigh = input.bool(true, "Show previous 4H high", group=previousLevelsGroup)
+showPrev4hLow = input.bool(true, "Show previous 4H low", group=previousLevelsGroup)
+prev4hColor = input.color(color.yellow, "Previous 4H color", group=previousLevelsGroup)
+showPrevDayHigh = input.bool(true, "Show previous day high", group=previousLevelsGroup)
+showPrevDayLow = input.bool(true, "Show previous day low", group=previousLevelsGroup)
+prevDayColor = input.color(color.blue, "Previous day color", group=previousLevelsGroup)
+showPrevWeekHigh = input.bool(false, "Show previous week high", group=previousLevelsGroup)
+showPrevWeekLow = input.bool(false, "Show previous week low", group=previousLevelsGroup)
+prevWeekColor = input.color(color.purple, "Previous week color", group=previousLevelsGroup)
+showPrevMonthHigh = input.bool(false, "Show previous month high", group=previousLevelsGroup)
+showPrevMonthLow = input.bool(false, "Show previous month low", group=previousLevelsGroup)
+prevMonthColor = input.color(color.orange, "Previous month color", group=previousLevelsGroup)
+
 //----------------------------------------------------------------------------- 
 // COLORS
 //-----------------------------------------------------------------------------
@@ -201,6 +284,9 @@ emaSlow = ta.ema(close, emaSlowLen)
 
 ph = ta.pivothigh(high, pivotLen, pivotLen)
 pl = ta.pivotlow(low, pivotLen, pivotLen)
+pivotVolume = volume[pivotLen]
+pivotVolumeMaximum = ta.highest(volume, volBoxFilterLen)[pivotLen]
+pivotHasHighVolume = not na(pivotVolume) and not na(pivotVolumeMaximum) and pivotVolume >= pivotVolumeMaximum
 mpStructurePivotHigh = ta.pivothigh(high, mpBOSLength, mpBOSLength)
 mpStructurePivotLow = ta.pivotlow(low, mpBOSLength, mpBOSLength)
 
@@ -221,6 +307,63 @@ if not na(mpStructurePivotLow)
     mpStructureLow := mpStructurePivotLow
     mpStructureLowBar := bar_index - mpBOSLength
     mpStructureLowBroken := false
+
+// Trendlines connect the two latest confirmed swing highs and lows. Pivot
+// confirmation is delayed by pivotLen bars, so the lines do not use future data.
+var float trendlinePriorHigh = na
+var float trendlineLatestHigh = na
+var int trendlinePriorHighBar = na
+var int trendlineLatestHighBar = na
+var float trendlinePriorLow = na
+var float trendlineLatestLow = na
+var int trendlinePriorLowBar = na
+var int trendlineLatestLowBar = na
+var line trendlineHigh = na
+var line trendlineLow = na
+var label trendlineHighMarker = na
+var label trendlineLowMarker = na
+
+if not na(ph)
+    trendlinePriorHigh := trendlineLatestHigh
+    trendlinePriorHighBar := trendlineLatestHighBar
+    trendlineLatestHigh := ph
+    trendlineLatestHighBar := bar_index - pivotLen
+    if showTrendlines and not na(trendlinePriorHigh)
+        line.delete(trendlineHigh)
+        trendlineHigh := line.new(trendlinePriorHighBar, trendlinePriorHigh, trendlineLatestHighBar, trendlineLatestHigh, xloc=xloc.bar_index, extend=extend.right, color=mpBOSBearColor, width=2)
+
+if not na(pl)
+    trendlinePriorLow := trendlineLatestLow
+    trendlinePriorLowBar := trendlineLatestLowBar
+    trendlineLatestLow := pl
+    trendlineLatestLowBar := bar_index - pivotLen
+    if showTrendlines and not na(trendlinePriorLow)
+        line.delete(trendlineLow)
+        trendlineLow := line.new(trendlinePriorLowBar, trendlinePriorLow, trendlineLatestLowBar, trendlineLatestLow, xloc=xloc.bar_index, extend=extend.right, color=mpBOSBullColor, width=2)
+
+if showTrendlineSwingMarkers and not na(ph)
+    if na(trendlineHighMarker)
+        trendlineHighMarker := label.new(bar_index - pivotLen, ph, "SH", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_down, color=mpBOSBearColor, textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(trendlineHighMarker, bar_index - pivotLen, ph)
+
+if showTrendlineSwingMarkers and not na(pl)
+    if na(trendlineLowMarker)
+        trendlineLowMarker := label.new(bar_index - pivotLen, pl, "SL", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_up, color=mpBOSBullColor, textcolor=color.white, size=size.tiny)
+    else
+        label.set_xy(trendlineLowMarker, bar_index - pivotLen, pl)
+
+if not showTrendlineSwingMarkers
+    label.delete(trendlineHighMarker)
+    label.delete(trendlineLowMarker)
+    trendlineHighMarker := na
+    trendlineLowMarker := na
+
+if not showTrendlines
+    line.delete(trendlineHigh)
+    line.delete(trendlineLow)
+    trendlineHigh := na
+    trendlineLow := na
 
 mpBullStructureBreak = barstate.isconfirmed and not na(mpStructureHigh) and not mpStructureHighBroken and bar_index >= mpStructureHighBar + mpBOSLength and close > mpStructureHigh and close[1] <= mpStructureHigh
 mpBearStructureBreak = barstate.isconfirmed and not na(mpStructureLow) and not mpStructureLowBroken and bar_index >= mpStructureLowBar + mpBOSLength and close < mpStructureLow and close[1] >= mpStructureLow
@@ -377,11 +520,11 @@ if newSupport
         coreSupportBox := box.new(left=bar_index - pivotLen, top=coreSupportTop, right=bar_index, bottom=coreSupport,
              bgcolor=supportColor, border_color=color.new(color.lime, 40), border_width=1,
              text=showZoneLabels ? "SUPPORT" : "", text_color=color.white, text_size=size.tiny)
-    if showHighVolumeZones and showSupport and volume >= ta.highest(volume, volBoxFilterLen)
-        boxW = math.max(atr, syminfo.mintick) * volBoxWidth
-        b = box.new(left=bar_index - pivotLen, top=pivotSupport + boxW, right=bar_index + zoneExtend, bottom=pivotSupport - boxW,
-             bgcolor=color.new(color.lime, 88), border_color=color.new(color.lime, 40), border_width=1,
-             text="SUPPORT • VOL: " + str.tostring(volume), text_color=color.white, text_size=size.tiny)
+    if showHighVolumeZones and showSupport and pivotHasHighVolume
+        boxW = math.max(atr[pivotLen], syminfo.mintick) * volBoxWidth
+        b = box.new(left=bar_index - pivotLen, top=pivotSupport + boxW, right=bar_index + volBoxExtend, bottom=pivotSupport - boxW,
+             bgcolor=color.new(color.rgb(76, 175, 80), volBoxTransparency), border_color=color.new(color.rgb(76, 175, 80), 65), border_width=1,
+             text=showHighVolumeBoxLabels ? "SUPPORT • VOL: " + str.tostring(pivotVolume, format.volume) : "", text_color=color.white, text_size=size.tiny)
         array.push(strongSupportBoxes, b)
         while array.size(strongSupportBoxes) > maxZonesSide
             oldBox = array.shift(strongSupportBoxes)
@@ -408,11 +551,11 @@ if newResistance
         coreResistanceBox := box.new(left=bar_index - pivotLen, top=coreResistance, right=bar_index, bottom=coreResistanceBottom,
              bgcolor=resistanceColor, border_color=color.new(color.red, 40), border_width=1,
              text=showZoneLabels ? "RESISTANCE" : "", text_color=color.white, text_size=size.tiny)
-    if showHighVolumeZones and showResistance and volume >= ta.highest(volume, volBoxFilterLen)
-        boxW = math.max(atr, syminfo.mintick) * volBoxWidth
-        b = box.new(left=bar_index - pivotLen, top=pivotResistance + boxW, right=bar_index + zoneExtend, bottom=pivotResistance - boxW,
-             bgcolor=color.new(color.red, 88), border_color=color.new(color.red, 40), border_width=1,
-             text="RESISTANCE • VOL: " + str.tostring(volume), text_color=color.white, text_size=size.tiny)
+    if showHighVolumeZones and showResistance and pivotHasHighVolume
+        boxW = math.max(atr[pivotLen], syminfo.mintick) * volBoxWidth
+        b = box.new(left=bar_index - pivotLen, top=pivotResistance + boxW, right=bar_index + volBoxExtend, bottom=pivotResistance - boxW,
+             bgcolor=color.new(color.rgb(220, 80, 80), volBoxTransparency), border_color=color.new(color.rgb(220, 80, 80), 65), border_width=1,
+             text=showHighVolumeBoxLabels ? "RESISTANCE • VOL: " + str.tostring(pivotVolume, format.volume) : "", text_color=color.white, text_size=size.tiny)
         array.push(strongResistanceBoxes, b)
         while array.size(strongResistanceBoxes) > maxZonesSide
             oldBox = array.shift(strongResistanceBoxes)
@@ -501,8 +644,8 @@ fLL_draw(show_, showPrice_, x1, y1, x2, y2, txt, labColor, labStyle, txtColor, e
             lb = label.new(x2, y2, txt, xloc.bar_index, yloc.price, labColor, labStyle, txtColor)
             label.delete(lb[1])
 
-fLL_draw(showMPZones and showSupport, true, bar_index + s1Bar, s1, bar_index + 10, s1, 'S -> ' + str.tostring(s1), color.new(color.green, 80), label.style_label_left, color.green, extend.right, color.new(color.green, 0), line.style_solid, 1)
-fLL_draw(showMPZones and showResistance, true, bar_index + r1Bar, r1, bar_index + 10, r1, 'R -> ' + str.tostring(r1), color.new(color.blue, 80), label.style_label_left, color.blue, extend.right, color.new(color.blue, 0), line.style_solid, 1)
+fLL_draw(showMPZones and showSupport, true, bar_index + s1Bar, s1, bar_index + 10, s1, 'S -> ' + str.tostring(s1), color.new(color.black, 15), label.style_label_left, color.lime, extend.right, color.new(color.green, 0), line.style_solid, 1)
+fLL_draw(showMPZones and showResistance, true, bar_index + r1Bar, r1, bar_index + 10, r1, 'R -> ' + str.tostring(r1), color.new(color.black, 15), label.style_label_left, color.aqua, extend.right, color.new(color.blue, 0), line.style_solid, 1)
 
 f_snr_barssince(_cond, _count) =>
     _barssince = bar_index - ta.valuewhen(_cond, bar_index, _count)
@@ -931,40 +1074,51 @@ alertcondition(showAlerts and barstate.isconfirmed and nextCandleSignal == "NO T
 //==============================================================================
 // DASHBOARD
 //==============================================================================
-var table dash = table.new(position.top_right, 2, 12, border_width=1)
+var table dash = table.new(position.top_right, 2, 12, bgcolor=color.new(color.rgb(15, 20, 26), 10), frame_color=color.new(color.white, 65), border_color=color.new(color.white, 80), border_width=1)
 
 biasText = bullTrend ? "BULLISH" : bearTrend ? "BEARISH" : "NEUTRAL"
 mtfText = mtfBull ? "HTF BULL" : mtfBear ? "HTF BEAR" : "HTF FLAT"
 zoneText = nearSupport ? "SUPPORT" : nearResistance ? "RESISTANCE" : "WAIT"
+dashboardSignalColor = nextCandleSignal == "UP" ? color.lime : nextCandleSignal == "DOWN" ? color.rgb(255, 105, 105) : color.white
+dashboardLabelBg = color.new(color.rgb(15, 20, 26), 8)
+dashboardValueBg = color.new(color.rgb(28, 34, 42), 8)
 
 if barstate.islast and showDashboard
-    table.cell(dash, 0, 0, "MP SR ZONE", text_color=color.white, bgcolor=color.new(color.blue, 20))
-    table.cell(dash, 1, 0, "Next Candle", text_color=color.white, bgcolor=color.new(color.blue, 20))
-    table.cell(dash, 0, 1, "Signal")
-    table.cell(dash, 1, 1, nextCandleSignal)
-    table.cell(dash, 0, 2, "Strength")
-    table.cell(dash, 1, 2, str.tostring(math.round(nextCandleEdge)) + " / " + str.tostring(math.round(nextCandleQuality)))
-    table.cell(dash, 0, 3, "Trend")
-    table.cell(dash, 1, 3, biasText)
-    table.cell(dash, 0, 4, "HTF")
-    table.cell(dash, 1, 4, mtfText)
-    table.cell(dash, 0, 5, "Market")
-    table.cell(dash, 1, 5, marketClockText)
-    table.cell(dash, 0, 6, "UP")
-    table.cell(dash, 1, 6, str.tostring(math.round(nextCandleUpScore)))
-    table.cell(dash, 0, 7, "DOWN")
-    table.cell(dash, 1, 7, str.tostring(math.round(nextCandleDownScore)))
-    table.cell(dash, 0, 8, "EDGE")
-    table.cell(dash, 1, 8, str.tostring(math.round(nextCandleEdge)))
-    table.cell(dash, 0, 9, "Quality")
-    table.cell(dash, 1, 9, str.tostring(math.round(nextCandleQuality)))
-    table.cell(dash, 0, 10, "RSI")
-    table.cell(dash, 1, 10, str.tostring(rsi, "#.0"))
-    table.cell(dash, 0, 11, "Session")
-    table.cell(dash, 1, 11, sessionLabel)
+    table.cell(dash, 0, 0, "MP SR ZONE", text_color=color.white, bgcolor=color.rgb(24, 72, 112))
+    table.cell(dash, 1, 0, "Next Candle", text_color=color.white, bgcolor=color.rgb(24, 72, 112))
+    table.cell(dash, 0, 1, "Signal", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 1, nextCandleSignal, text_color=dashboardSignalColor, bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 2, "Strength", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 2, str.tostring(math.round(nextCandleEdge)) + " / " + str.tostring(math.round(nextCandleQuality)), text_color=color.white, bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 3, "Trend", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 3, biasText, text_color=bullTrend ? color.lime : bearTrend ? color.rgb(255, 105, 105) : color.white, bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 4, "HTF", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 4, mtfText, text_color=mtfBull ? color.lime : mtfBear ? color.rgb(255, 105, 105) : color.white, bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 5, "Market", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 5, marketClockText, text_color=color.white, bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 6, "UP", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 6, str.tostring(math.round(nextCandleUpScore)), text_color=color.lime, bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 7, "DOWN", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 7, str.tostring(math.round(nextCandleDownScore)), text_color=color.rgb(255, 105, 105), bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 8, "EDGE", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 8, str.tostring(math.round(nextCandleEdge)), text_color=color.white, bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 9, "Quality", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 9, str.tostring(math.round(nextCandleQuality)), text_color=color.white, bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 10, "RSI", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 10, str.tostring(rsi, "#.0"), text_color=color.white, bgcolor=dashboardValueBg)
+    table.cell(dash, 0, 11, "Session", text_color=color.white, bgcolor=dashboardLabelBg)
+    table.cell(dash, 1, 11, sessionLabel, text_color=color.white, bgcolor=dashboardValueBg)
 
-if showReasonCodes and barstate.islast
-    label.new(bar_index, high, text=nextCandleReason, style=label.style_label_left, color=color.new(color.white, 0), textcolor=color.white, yloc=yloc.price, size=size.tiny)
+var label reasonCodeLabel = na
+if barstate.islast and showReasonCodes
+    if na(reasonCodeLabel)
+        reasonCodeLabel := label.new(bar_index, high, text=nextCandleReason, style=label.style_label_left, color=color.new(color.rgb(24, 30, 38), 5), textcolor=color.white, yloc=yloc.price, size=size.small)
+    else
+        label.set_xy(reasonCodeLabel, bar_index, high)
+        label.set_text(reasonCodeLabel, nextCandleReason)
+else if barstate.islast and not showReasonCodes and not na(reasonCodeLabel)
+    label.delete(reasonCodeLabel)
+    reasonCodeLabel := na
 
 //==============================================================================
 // LEGACY PLOT / ALERTS compatibility
@@ -1274,3 +1428,402 @@ alertcondition(engulfPatternAlerts and engulf_current_bear and not engulf_curren
 //==============================================================================
 // END — MP ENGULFING FIB LEVELS
 //==============================================================================
+
+//==============================================================================
+// ORDER BLOCK FINDER
+//==============================================================================
+// An order block is the opposite-color candle immediately before the configured
+// run of directional candles. Detection waits for the current bar to close.
+obPeriod = obPeriods + 1
+obAbsMove = not na(close[obPeriod]) and close[obPeriod] != 0.0 ? math.abs(close[obPeriod] - close[1]) / math.abs(close[obPeriod]) * 100.0 : na
+obMoveRelevant = not na(obAbsMove) and obAbsMove >= obThreshold
+
+int obUpCandles = 0
+int obDownCandles = 0
+for obIndex = 1 to obPeriods
+    obUpCandles += close[obIndex] > open[obIndex] ? 1 : 0
+    obDownCandles += close[obIndex] < open[obIndex] ? 1 : 0
+
+obBullCandle = not na(close[obPeriod]) and close[obPeriod] < open[obPeriod]
+obBearCandle = not na(close[obPeriod]) and close[obPeriod] > open[obPeriod]
+obBullDetected = barstate.isconfirmed and obBullCandle and obUpCandles == obPeriods and obMoveRelevant
+obBearDetected = barstate.isconfirmed and obBearCandle and obDownCandles == obPeriods and obMoveRelevant
+
+obBullHigh = obBullDetected ? (obUseWicks ? high[obPeriod] : open[obPeriod]) : na
+obBullLow = obBullDetected ? low[obPeriod] : na
+obBullAverage = (obBullHigh + obBullLow) / 2.0
+obBearHigh = obBearDetected ? high[obPeriod] : na
+obBearLow = obBearDetected ? (obUseWicks ? low[obPeriod] : open[obPeriod]) : na
+obBearAverage = (obBearHigh + obBearLow) / 2.0
+
+obBullColor = obColorScheme == "DARK" ? color.white : color.green
+obBearColor = obColorScheme == "DARK" ? color.blue : color.red
+
+plotshape(obShowMarkers and obBullDetected, title="Bullish Order Block", style=shape.triangleup, color=obBullColor, textcolor=obBullColor, size=size.tiny, location=location.belowbar, offset=-obPeriod, text="Bullish OB")
+obBullHighPlot = plot(obBullHigh, title="Bullish OB High", style=plot.style_linebr, color=obBullColor, offset=-obPeriod, linewidth=2)
+obBullLowPlot = plot(obBullLow, title="Bullish OB Low", style=plot.style_linebr, color=obBullColor, offset=-obPeriod, linewidth=2)
+fill(obBullHighPlot, obBullLowPlot, color=color.new(obBullColor, obFillTransparency), title="Bullish OB zone")
+plotshape(obBullAverage, title="Bullish OB Average", style=shape.cross, color=obBullColor, size=size.tiny, location=location.absolute, offset=-obPeriod)
+
+plotshape(obShowMarkers and obBearDetected, title="Bearish Order Block", style=shape.triangledown, color=obBearColor, textcolor=obBearColor, size=size.tiny, location=location.abovebar, offset=-obPeriod, text="Bearish OB")
+obBearLowPlot = plot(obBearLow, title="Bearish OB Low", style=plot.style_linebr, color=obBearColor, offset=-obPeriod, linewidth=2)
+obBearHighPlot = plot(obBearHigh, title="Bearish OB High", style=plot.style_linebr, color=obBearColor, offset=-obPeriod, linewidth=2)
+fill(obBearLowPlot, obBearHighPlot, color=color.new(obBearColor, obFillTransparency), title="Bearish OB zone")
+plotshape(obBearAverage, title="Bearish OB Average", style=shape.cross, color=obBearColor, size=size.tiny, location=location.absolute, offset=-obPeriod)
+
+// Show source-bar volume for the latest block in each direction to keep the chart readable.
+var label obBullVolumeLabel = na
+var label obBearVolumeLabel = na
+obSourceVolumeDisplay = na(volume[obPeriod]) ? "n/a" : str.tostring(volume[obPeriod], format.volume)
+if obBullDetected and obShowVolume
+    label.delete(obBullVolumeLabel)
+    obBullVolumeLabel := label.new(bar_index - obPeriod, low[obPeriod], "OB VOL " + obSourceVolumeDisplay, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.rgb(18, 23, 30), 5), textcolor=color.white, style=label.style_label_up, size=size.tiny, tooltip="Bullish order-block source candle volume: " + (na(volume[obPeriod]) ? "n/a" : str.tostring(volume[obPeriod])))
+if obBearDetected and obShowVolume
+    label.delete(obBearVolumeLabel)
+    obBearVolumeLabel := label.new(bar_index - obPeriod, high[obPeriod], "OB VOL " + obSourceVolumeDisplay, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.rgb(18, 23, 30), 5), textcolor=color.white, style=label.style_label_down, size=size.tiny, tooltip="Bearish order-block source candle volume: " + (na(volume[obPeriod]) ? "n/a" : str.tostring(volume[obPeriod])))
+if not obShowVolume
+    label.delete(obBullVolumeLabel)
+    label.delete(obBearVolumeLabel)
+    obBullVolumeLabel := na
+    obBearVolumeLabel := na
+
+// Keep only the newest channel in each direction; historical OB zones remain plotted.
+var line obBullAverageLine = na
+var line obBullHighLine = na
+var line obBullLowLine = na
+var line obBearAverageLine = na
+var line obBearHighLine = na
+var line obBearLowLine = na
+
+if obBullDetected and obShowBullChannel
+    line.delete(obBullAverageLine)
+    line.delete(obBullHighLine)
+    line.delete(obBullLowLine)
+    obBullAverageLine := line.new(bar_index, obBullAverage, bar_index - 1, obBullAverage, extend=extend.left, color=obBullColor, style=line.style_solid, width=1)
+    obBullHighLine := line.new(bar_index, obBullHigh, bar_index - 1, obBullHigh, extend=extend.left, color=obBullColor, style=line.style_dashed, width=1)
+    obBullLowLine := line.new(bar_index, obBullLow, bar_index - 1, obBullLow, extend=extend.left, color=obBullColor, style=line.style_dashed, width=1)
+
+if obBearDetected and obShowBearChannel
+    line.delete(obBearAverageLine)
+    line.delete(obBearHighLine)
+    line.delete(obBearLowLine)
+    obBearAverageLine := line.new(bar_index, obBearAverage, bar_index - 1, obBearAverage, extend=extend.left, color=obBearColor, style=line.style_solid, width=1)
+    obBearHighLine := line.new(bar_index, obBearHigh, bar_index - 1, obBearHigh, extend=extend.left, color=obBearColor, style=line.style_dashed, width=1)
+    obBearLowLine := line.new(bar_index, obBearLow, bar_index - 1, obBearLow, extend=extend.left, color=obBearColor, style=line.style_dashed, width=1)
+
+if not obShowBullChannel
+    line.delete(obBullAverageLine)
+    line.delete(obBullHighLine)
+    line.delete(obBullLowLine)
+    obBullAverageLine := na
+    obBullHighLine := na
+    obBullLowLine := na
+
+if not obShowBearChannel
+    line.delete(obBearAverageLine)
+    line.delete(obBearHighLine)
+    line.delete(obBearLowLine)
+    obBearAverageLine := na
+    obBearHighLine := na
+    obBearLowLine := na
+
+var float obLatestBullHigh = na
+var float obLatestBullAverage = na
+var float obLatestBullLow = na
+var float obLatestBullVolume = na
+var float obLatestBearHigh = na
+var float obLatestBearAverage = na
+var float obLatestBearLow = na
+var float obLatestBearVolume = na
+
+if obBullDetected
+    obLatestBullHigh := obBullHigh
+    obLatestBullAverage := obBullAverage
+    obLatestBullLow := obBullLow
+    obLatestBullVolume := volume[obPeriod]
+if obBearDetected
+    obLatestBearHigh := obBearHigh
+    obLatestBearAverage := obBearAverage
+    obLatestBearLow := obBearLow
+    obLatestBearVolume := volume[obPeriod]
+
+plot(obLatestBullHigh, title="Latest Bullish OB High", display=display.data_window)
+plot(obLatestBullAverage, title="Latest Bullish OB Average", display=display.data_window)
+plot(obLatestBullLow, title="Latest Bullish OB Low", display=display.data_window)
+plot(obLatestBearHigh, title="Latest Bearish OB High", display=display.data_window)
+plot(obLatestBearAverage, title="Latest Bearish OB Average", display=display.data_window)
+plot(obLatestBearLow, title="Latest Bearish OB Low", display=display.data_window)
+plot(obLatestBullVolume, title="Latest Bullish OB Source Volume", display=display.data_window)
+plot(obLatestBearVolume, title="Latest Bearish OB Source Volume", display=display.data_window)
+
+alertcondition(obEnableAlerts and obBullDetected, title="New Bullish OB detected", message="MP SR Zone: New Bullish Order Block detected; this is not a buy signal")
+alertcondition(obEnableAlerts and obBearDetected, title="New Bearish OB detected", message="MP SR Zone: New Bearish Order Block detected; this is not a sell signal")
+
+ob_get_panel_position(position_string) =>
+    switch position_string
+        "top_left" => position.top_left
+        "top_center" => position.top_center
+        "top_right" => position.top_right
+        "middle_left" => position.middle_left
+        "middle_center" => position.middle_center
+        "middle_right" => position.middle_right
+        "bottom_left" => position.bottom_left
+        "bottom_center" => position.bottom_center
+        "bottom_right" => position.bottom_right
+        => position.middle_right
+
+ob_format_price(value) => na(value) ? "n/a" : str.tostring(value, format.mintick)
+
+var table obInfoPanel = na
+if barstate.islast and obShowPanel
+    if na(obInfoPanel)
+        obInfoPanel := table.new(ob_get_panel_position(obPanelPositionInput), 2, 9, bgcolor=color.new(color.rgb(15, 20, 26), 5), frame_color=color.new(color.white, 65), border_color=color.new(color.white, 80), border_width=1)
+    table.merge_cells(obInfoPanel, 0, 0, 1, 0)
+    table.merge_cells(obInfoPanel, 0, 1, 1, 1)
+    table.merge_cells(obInfoPanel, 0, 5, 1, 5)
+    table.cell(obInfoPanel, 0, 0, "LATEST ORDER BLOCKS", text_color=color.white, bgcolor=color.new(color.blue, 35))
+    table.cell(obInfoPanel, 0, 1, "Bullish", text_color=obBullColor, bgcolor=color.new(color.black, 5))
+    table.cell(obInfoPanel, 0, 2, "High", text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 1, 2, ob_format_price(obLatestBullHigh), text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 0, 3, "Average", text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 1, 3, ob_format_price(obLatestBullAverage), text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 0, 4, "Low", text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 1, 4, ob_format_price(obLatestBullLow), text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 0, 5, "Bearish", text_color=obBearColor, bgcolor=color.new(color.black, 5))
+    table.cell(obInfoPanel, 0, 6, "High", text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 1, 6, ob_format_price(obLatestBearHigh), text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 0, 7, "Average", text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 1, 7, ob_format_price(obLatestBearAverage), text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 0, 8, "Low", text_color=color.white, bgcolor=color.new(color.black, 8))
+    table.cell(obInfoPanel, 1, 8, ob_format_price(obLatestBearLow), text_color=color.white, bgcolor=color.new(color.black, 8))
+else if barstate.islast and not obShowPanel and not na(obInfoPanel)
+    table.delete(obInfoPanel)
+    obInfoPanel := na
+
+var string obDocumentationTooltip = "Order Block Finder: a bullish block is the last down candle before the configured run of up candles; a bearish block is the last up candle before the run of down candles. The minimum-move filter compares the block close with the last confirming candle. Historical zones are plotted at the block candle after the sequence is confirmed. These levels are areas of interest, not trade signals."
+var label obDocumentationLabel = na
+if barstate.islast and obShowDocumentation
+    obLabelOffset = nz(time - time[1], 60000) * 35
+    if na(obDocumentationLabel)
+        obDocumentationLabel := label.new(time + obLabelOffset, close, "ORDER BLOCKS", xloc=xloc.bar_time, yloc=yloc.price, color=color.gray, textcolor=color.white, style=label.style_label_center, size=size.tiny, tooltip=obDocumentationTooltip)
+    else
+        label.set_xy(obDocumentationLabel, time + obLabelOffset, close)
+else if barstate.islast and not obShowDocumentation and not na(obDocumentationLabel)
+    label.delete(obDocumentationLabel)
+    obDocumentationLabel := na
+
+//==============================================================================
+// FAIR VALUE GAPS AND IMBALANCES
+//==============================================================================
+// Gaps are created only after the detection candle closes. Bullish zones always
+// use top > bottom so box geometry remains valid on TradingView.
+f_gap_right_boundary(extensionMode, extensionBars) =>
+    extensionMode == "None" ? bar_index : extensionMode == "Limited" ? bar_index + extensionBars : last_bar_index + 3
+
+f_add_gap(array<box> zoneBoxes, array<line> midLines, array<label> zoneLabels, float zoneTop, float zoneBottom, color zoneColor, string zoneName, int startBar, string extensionMode, int extensionBars, int keepCount) =>
+    rightBar = f_gap_right_boundary(extensionMode, extensionBars)
+    midpoint = (zoneTop + zoneBottom) / 2.0
+    zoneBox = box.new(left=startBar, top=zoneTop, right=rightBar, bottom=zoneBottom, bgcolor=color.new(zoneColor, fvgTransparency), border_color=zoneColor)
+    midpointLine = line.new(startBar, midpoint, rightBar, midpoint, xloc=xloc.bar_index, color=color.new(zoneColor, 45), style=line.style_dashed)
+    zoneLabel = label.new(rightBar, midpoint, zoneName, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.rgb(18, 23, 30), 5), textcolor=color.white, style=label.style_label_left, textalign=text.align_right, size=size.tiny, tooltip="From: " + str.tostring(zoneBottom, format.mintick) + " To: " + str.tostring(zoneTop, format.mintick))
+    array.unshift(zoneBoxes, zoneBox)
+    array.unshift(midLines, midpointLine)
+    array.unshift(zoneLabels, zoneLabel)
+    while array.size(zoneBoxes) > keepCount
+        box.delete(array.pop(zoneBoxes))
+        line.delete(array.pop(midLines))
+        label.delete(array.pop(zoneLabels))
+
+f_clear_gap(array<box> zoneBoxes, array<line> midLines, array<label> zoneLabels) =>
+    while array.size(zoneBoxes) > 0
+        box.delete(array.pop(zoneBoxes))
+        line.delete(array.pop(midLines))
+        label.delete(array.pop(zoneLabels))
+
+f_update_default_gap_extension(array<box> zoneBoxes, array<line> midLines, array<label> zoneLabels, string extensionMode) =>
+    if barstate.islast and extensionMode == "Default" and array.size(zoneBoxes) > 0
+        rightBar = last_bar_index + 3
+        for gapIndex = 0 to array.size(zoneBoxes) - 1
+            box.set_right(array.get(zoneBoxes, gapIndex), rightBar)
+            line.set_x2(array.get(midLines, gapIndex), rightBar)
+            label.set_x(array.get(zoneLabels, gapIndex), rightBar)
+
+var array<box> bullFvgBoxes = array.new<box>()
+var array<line> bullFvgMidLines = array.new<line>()
+var array<label> bullFvgLabels = array.new<label>()
+var array<box> bearFvgBoxes = array.new<box>()
+var array<line> bearFvgMidLines = array.new<line>()
+var array<label> bearFvgLabels = array.new<label>()
+var array<box> bullImbalanceBoxes = array.new<box>()
+var array<line> bullImbalanceMidLines = array.new<line>()
+var array<label> bullImbalanceLabels = array.new<label>()
+var array<box> bearImbalanceBoxes = array.new<box>()
+var array<line> bearImbalanceMidLines = array.new<line>()
+var array<label> bearImbalanceLabels = array.new<label>()
+
+if barstate.isconfirmed and bar_index >= 2 and showBullFvg and high[2] < low
+    f_add_gap(bullFvgBoxes, bullFvgMidLines, bullFvgLabels, low, high[2], bullFvgColor, "Bullish FVG", bar_index - 2, bullFvgExtend, bullFvgExtendBars, bullFvgCount)
+if barstate.isconfirmed and bar_index >= 2 and showBearFvg and low[2] > high
+    f_add_gap(bearFvgBoxes, bearFvgMidLines, bearFvgLabels, low[2], high, bearFvgColor, "Bearish FVG", bar_index - 2, bearFvgExtend, bearFvgExtendBars, bearFvgCount)
+
+// An imbalance is a candle-to-candle open/close gap, distinct from the 3-bar FVG.
+if barstate.isconfirmed and bar_index >= 1 and showBullImbalance and close[1] < open
+    f_add_gap(bullImbalanceBoxes, bullImbalanceMidLines, bullImbalanceLabels, open, close[1], bullImbalanceColor, "Bullish Imbalance", bar_index - 1, bullImbalanceExtend, bullImbalanceExtendBars, bullImbalanceCount)
+if barstate.isconfirmed and bar_index >= 1 and showBearImbalance and close[1] > open
+    f_add_gap(bearImbalanceBoxes, bearImbalanceMidLines, bearImbalanceLabels, close[1], open, bearImbalanceColor, "Bearish Imbalance", bar_index - 1, bearImbalanceExtend, bearImbalanceExtendBars, bearImbalanceCount)
+
+if not showBullFvg
+    f_clear_gap(bullFvgBoxes, bullFvgMidLines, bullFvgLabels)
+if not showBearFvg
+    f_clear_gap(bearFvgBoxes, bearFvgMidLines, bearFvgLabels)
+if not showBullImbalance
+    f_clear_gap(bullImbalanceBoxes, bullImbalanceMidLines, bullImbalanceLabels)
+if not showBearImbalance
+    f_clear_gap(bearImbalanceBoxes, bearImbalanceMidLines, bearImbalanceLabels)
+
+f_update_default_gap_extension(bullFvgBoxes, bullFvgMidLines, bullFvgLabels, bullFvgExtend)
+f_update_default_gap_extension(bearFvgBoxes, bearFvgMidLines, bearFvgLabels, bearFvgExtend)
+f_update_default_gap_extension(bullImbalanceBoxes, bullImbalanceMidLines, bullImbalanceLabels, bullImbalanceExtend)
+f_update_default_gap_extension(bearImbalanceBoxes, bearImbalanceMidLines, bearImbalanceLabels, bearImbalanceExtend)
+
+//==============================================================================
+// SWING LEVELS AND DIRECTIONAL TARGET
+//==============================================================================
+// A swing is the middle candle of a confirmed three-candle local extreme.
+f_swing_right_boundary(extensionMode, extensionBars) =>
+    extensionMode == "None" ? bar_index : extensionMode == "Limited" ? bar_index + extensionBars : last_bar_index + 3
+
+f_add_swing_level(array<line> swingLines, array<label> swingLabels, float swingPrice, int swingBar, color swingColor, string swingName, string extensionMode, int extensionBars, int keepCount) =>
+    rightBar = f_swing_right_boundary(extensionMode, extensionBars)
+    swingLine = line.new(swingBar, swingPrice, rightBar, swingPrice, xloc=xloc.bar_index, color=swingColor, width=1)
+    swingLabel = label.new(rightBar, swingPrice, swingName, xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.rgb(18, 23, 30), 5), textcolor=color.white, style=label.style_label_left, size=size.tiny, tooltip=str.tostring(swingPrice, format.mintick))
+    array.unshift(swingLines, swingLine)
+    array.unshift(swingLabels, swingLabel)
+    while array.size(swingLines) > keepCount
+        line.delete(array.pop(swingLines))
+        label.delete(array.pop(swingLabels))
+
+f_clear_swing_levels(array<line> swingLines, array<label> swingLabels) =>
+    while array.size(swingLines) > 0
+        line.delete(array.pop(swingLines))
+        label.delete(array.pop(swingLabels))
+
+f_update_default_swing_extension(array<line> swingLines, array<label> swingLabels, string extensionMode) =>
+    if barstate.islast and extensionMode == "Default" and array.size(swingLines) > 0
+        rightBar = last_bar_index + 3
+        for swingIndex = 0 to array.size(swingLines) - 1
+            line.set_x2(array.get(swingLines, swingIndex), rightBar)
+            label.set_x(array.get(swingLabels, swingIndex), rightBar)
+
+var array<line> swingHighLines = array.new<line>()
+var array<label> swingHighLevelLabels = array.new<label>()
+var array<line> swingLowLines = array.new<line>()
+var array<label> swingLowLevelLabels = array.new<label>()
+var array<float> targetSwingHighPrices = array.new<float>()
+var array<int> targetSwingHighBars = array.new<int>()
+var array<float> targetSwingLowPrices = array.new<float>()
+var array<int> targetSwingLowBars = array.new<int>()
+
+isSwingHigh = barstate.isconfirmed and bar_index >= 2 and high[1] > high and high[1] > high[2]
+isSwingLow = barstate.isconfirmed and bar_index >= 2 and low[1] < low and low[1] < low[2]
+
+if isSwingHigh
+    array.unshift(targetSwingHighPrices, high[1])
+    array.unshift(targetSwingHighBars, bar_index - 1)
+    if array.size(targetSwingHighPrices) > 100
+        array.pop(targetSwingHighPrices)
+        array.pop(targetSwingHighBars)
+    if showSwingHighLevels
+        f_add_swing_level(swingHighLines, swingHighLevelLabels, high[1], bar_index - 1, swingHighColor, "Swing High", swingHighExtend, swingHighExtendBars, swingHighCount)
+
+if isSwingLow
+    array.unshift(targetSwingLowPrices, low[1])
+    array.unshift(targetSwingLowBars, bar_index - 1)
+    if array.size(targetSwingLowPrices) > 100
+        array.pop(targetSwingLowPrices)
+        array.pop(targetSwingLowBars)
+    if showSwingLowLevels
+        f_add_swing_level(swingLowLines, swingLowLevelLabels, low[1], bar_index - 1, swingLowColor, "Swing Low", swingLowExtend, swingLowExtendBars, swingLowCount)
+
+if not showSwingHighLevels
+    f_clear_swing_levels(swingHighLines, swingHighLevelLabels)
+if not showSwingLowLevels
+    f_clear_swing_levels(swingLowLines, swingLowLevelLabels)
+
+f_update_default_swing_extension(swingHighLines, swingHighLevelLabels, swingHighExtend)
+f_update_default_swing_extension(swingLowLines, swingLowLevelLabels, swingLowExtend)
+
+var line currentTargetLine = na
+var label currentTargetLabel = na
+if barstate.islast
+    line.delete(currentTargetLine)
+    label.delete(currentTargetLabel)
+    currentTargetLine := na
+    currentTargetLabel := na
+    if showNextTarget and close > open and array.size(targetSwingHighPrices) > 0
+        for targetIndex = 0 to array.size(targetSwingHighPrices) - 1
+            targetPrice = array.get(targetSwingHighPrices, targetIndex)
+            if targetPrice > close
+                targetBar = array.get(targetSwingHighBars, targetIndex)
+                currentTargetLine := line.new(targetBar, targetPrice, bar_index + 6, targetPrice, xloc=xloc.bar_index, color=nextTargetHighColor, width=2, style=line.style_dashed)
+                currentTargetLabel := label.new(bar_index + 6, targetPrice, "Potential Target", xloc=xloc.bar_index, yloc=yloc.price, color=nextTargetHighColor, textcolor=color.white, style=label.style_label_left, size=size.tiny, tooltip=str.tostring(targetPrice, format.mintick))
+                break
+    else if showNextTarget and close < open and array.size(targetSwingLowPrices) > 0
+        for targetIndex = 0 to array.size(targetSwingLowPrices) - 1
+            targetPrice = array.get(targetSwingLowPrices, targetIndex)
+            if targetPrice < close
+                targetBar = array.get(targetSwingLowBars, targetIndex)
+                currentTargetLine := line.new(targetBar, targetPrice, bar_index + 6, targetPrice, xloc=xloc.bar_index, color=nextTargetLowColor, width=2, style=line.style_dashed)
+                currentTargetLabel := label.new(bar_index + 6, targetPrice, "Potential Target", xloc=xloc.bar_index, yloc=yloc.price, color=nextTargetLowColor, textcolor=color.white, style=label.style_label_left, size=size.tiny, tooltip=str.tostring(targetPrice, format.mintick))
+                break
+
+//==============================================================================
+// PREVIOUS 4H / DAILY / WEEKLY / MONTHLY LEVELS
+//==============================================================================
+// Request the last completed higher-timeframe bar to keep these reference levels stable.
+[previous4hHigh, previous4hLow] = request.security(syminfo.tickerid, "240", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+[previousDayHigh, previousDayLow] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+[previousWeekHigh, previousWeekLow] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+[previousMonthHigh, previousMonthLow] = request.security(syminfo.tickerid, "M", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+
+f_contrast_text(color backgroundColor) =>
+    luminance = color.r(backgroundColor) * 0.299 + color.g(backgroundColor) * 0.587 + color.b(backgroundColor) * 0.114
+    luminance > 150 ? color.black : color.white
+
+f_sync_previous_level(array<line> levelLines, array<label> levelLabels, int levelIndex, bool enabled, float levelPrice, color levelColor, string levelName) =>
+    storedLine = array.get(levelLines, levelIndex)
+    storedLabel = array.get(levelLabels, levelIndex)
+    if enabled and not na(levelPrice)
+        if na(storedLine)
+            storedLine := line.new(bar_index - 1, levelPrice, bar_index + 1, levelPrice, xloc=xloc.bar_index, extend=extend.right, color=levelColor, width=2)
+            array.set(levelLines, levelIndex, storedLine)
+        else
+            line.set_xy1(storedLine, bar_index - 1, levelPrice)
+            line.set_xy2(storedLine, bar_index + 1, levelPrice)
+            line.set_color(storedLine, levelColor)
+        if na(storedLabel)
+            storedLabel := label.new(bar_index + 1, levelPrice, levelName, xloc=xloc.bar_index, yloc=yloc.price, color=levelColor, textcolor=f_contrast_text(levelColor), style=label.style_label_left, size=size.tiny, tooltip=str.tostring(levelPrice, format.mintick))
+            array.set(levelLabels, levelIndex, storedLabel)
+        else
+            label.set_xy(storedLabel, bar_index + 1, levelPrice)
+            label.set_color(storedLabel, levelColor)
+            label.set_textcolor(storedLabel, f_contrast_text(levelColor))
+            label.set_tooltip(storedLabel, str.tostring(levelPrice, format.mintick))
+    else
+        line.delete(storedLine)
+        label.delete(storedLabel)
+        array.set(levelLines, levelIndex, na)
+        array.set(levelLabels, levelIndex, na)
+
+var array<line> previousLevelLines = array.new<line>(8, na)
+var array<label> previousLevelLabels = array.new<label>(8, na)
+if barstate.islast
+    chartSeconds = timeframe.in_seconds()
+    f_sync_previous_level(previousLevelLines, previousLevelLabels, 0, showPrev4hHigh and chartSeconds <= timeframe.in_seconds("240"), previous4hHigh, prev4hColor, "Prev 4H High")
+    f_sync_previous_level(previousLevelLines, previousLevelLabels, 1, showPrev4hLow and chartSeconds <= timeframe.in_seconds("240"), previous4hLow, prev4hColor, "Prev 4H Low")
+    f_sync_previous_level(previousLevelLines, previousLevelLabels, 2, showPrevDayHigh and chartSeconds <= timeframe.in_seconds("D"), previousDayHigh, prevDayColor, "Prev Day High")
+    f_sync_previous_level(previousLevelLines, previousLevelLabels, 3, showPrevDayLow and chartSeconds <= timeframe.in_seconds("D"), previousDayLow, prevDayColor, "Prev Day Low")
+    f_sync_previous_level(previousLevelLines, previousLevelLabels, 4, showPrevWeekHigh and chartSeconds <= timeframe.in_seconds("W"), previousWeekHigh, prevWeekColor, "Prev Week High")
+    f_sync_previous_level(previousLevelLines, previousLevelLabels, 5, showPrevWeekLow and chartSeconds <= timeframe.in_seconds("W"), previousWeekLow, prevWeekColor, "Prev Week Low")
+    f_sync_previous_level(previousLevelLines, previousLevelLabels, 6, showPrevMonthHigh and chartSeconds <= timeframe.in_seconds("M"), previousMonthHigh, prevMonthColor, "Prev Month High")
+    f_sync_previous_level(previousLevelLines, previousLevelLabels, 7, showPrevMonthLow and chartSeconds <= timeframe.in_seconds("M"), previousMonthLow, prevMonthColor, "Prev Month Low")
